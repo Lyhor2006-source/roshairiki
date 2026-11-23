@@ -23,8 +23,8 @@ RyomenX_FILES = \
     imgui/backends/imgui_impl_metal.mm
 
 RyomenX_FRAMEWORKS = UIKit Metal MetalKit Foundation QuartzCore Security
-RyomenX_CFLAGS = -fobjc-arc -Iinclude -Iimgui -Iimgui/backends -O2
-RyomenX_CCFLAGS = -std=c++17 -fobjc-arc -Iinclude -Iimgui -Iimgui/backends -O2
-RyomenX_CXXFLAGS = -std=c++17 -fobjc-arc -Iinclude -Iimgui -Iimgui/backends -O2
+RyomenX_CFLAGS = -fobjc-arc -Iinclude -Iimgui -Iimgui/backends -O2 -Wno-error -Wno-unused-variable -Wno-unused-function -Wno-unused-parameter
+RyomenX_CCFLAGS = -std=c++17 -fobjc-arc -Iinclude -Iimgui -Iimgui/backends -O2 -Wno-error -Wno-unused-variable -Wno-unused-function -Wno-unused-parameter
+RyomenX_CXXFLAGS = -std=c++17 -fobjc-arc -Iinclude -Iimgui -Iimgui/backends -O2 -Wno-error -Wno-unused-variable -Wno-unused-function -Wno-unused-parameter
 
 include $(THEOS_MAKE_PATH)/library.mk

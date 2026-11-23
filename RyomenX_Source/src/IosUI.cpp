@@ -11,11 +11,7 @@ namespace IosUI {
 
 using namespace RyomenX;
 
-static ImVec2 s_bar_touch_start_pos(100.0f, 100.0f);
-static bool s_bar_is_dragging = false;
-
 static ImVec2 s_win_touch_start_pos(150.0f, 100.0f);
-static bool s_win_is_dragging = false;
 
 bool IsTouchInsideUI(float touch_x, float touch_y) {
     auto& s = Settings::Get();
