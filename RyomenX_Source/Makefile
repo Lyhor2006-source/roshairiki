@@ -23,8 +23,7 @@ RyomenX_FILES = \
     imgui/backends/imgui_impl_metal.mm
 
 RyomenX_FRAMEWORKS = UIKit Metal MetalKit Foundation QuartzCore Security
-RyomenX_CFLAGS = -fobjc-arc -Iinclude -Iimgui -Iimgui/backends -O2 -target arm64-apple-ios14.0 -miphoneos-version-min=14.0
-RyomenX_CXXFLAGS = -std=c++17 -fobjc-arc -Iinclude -Iimgui -Iimgui/backends -O2 -target arm64-apple-ios14.0 -miphoneos-version-min=14.0
-RyomenX_LDFLAGS = -target arm64-apple-ios14.0 -miphoneos-version-min=14.0
+RyomenX_CFLAGS = -fobjc-arc -Iinclude -Iimgui -Iimgui/backends -O2
+RyomenX_CXXFLAGS = -std=c++17 -fobjc-arc -Iinclude -Iimgui -Iimgui/backends -O2
 
 include $(THEOS_MAKE_PATH)/library.mk

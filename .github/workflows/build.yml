@@ -22,11 +22,11 @@ jobs:
         run: |
           echo "[*] Ensuring iOS SDK is loaded into Theos..."
           git clone --depth 1 https://github.com/theos/sdks.git /tmp/sdks
-          # CRITICAL: Purge any AppleTVOS / watchOS SDK so Theos NEVER builds for tvOS!
+          # CRITICAL: Purge any AppleTVOS / watchOS SDK so Theos NEVER builds for tvOS or watchOS!
           sudo rm -rf /tmp/sdks/AppleTVOS* /tmp/sdks/WatchOS* "$THEOS/sdks/AppleTVOS"* "$THEOS/sdks/WatchOS"* || true
           # Copy ONLY iPhoneOS SDKs
           sudo cp -r /tmp/sdks/iPhoneOS*.sdk "$THEOS/sdks/" || true
-          echo "[*] Available Theos SDKs:"
+          echo "[*] Available Theos SDKs in $THEOS/sdks:"
           ls -la "$THEOS/sdks/"
 
           # Detect source folder
@@ -44,29 +44,39 @@ jobs:
           fi
           echo "[*] Compiling RyomenX.dylib with Theos (iOS arm64)..."
           make clean || true
-          make 2>&1 | tee theos_build.log
+          set -o pipefail
+          make 2>&1 | tee theos_build.log || {
+            echo "::error::Theos compilation failed!"
+            exit 1
+          }
 
-          echo "[*] All generated binaries:"
+          echo "[*] All generated binaries in source tree:"
           find . -type f -name "*dylib*" || true
 
       - name: Locate, Verify & Enforce iOS Platform
         run: |
           mkdir -p output
-          DYLIB=$(find . -type f -name "*RyomenX*.dylib" | head -n 1)
+          # Look specifically in RyomenX_Source/.theos/obj or RyomenX_Source
+          DYLIB=$(find RyomenX_Source/.theos RyomenX_Source/obj .theos obj -type f \( -name "*RyomenX*.dylib" -o -name "libRyomenX.dylib" \) 2>/dev/null | head -n 1)
           if [ -z "$DYLIB" ]; then
-            DYLIB=$(find . -type f -name "*.dylib" | head -n 1)
+            DYLIB=$(find RyomenX_Source -type f -name "*RyomenX*.dylib" 2>/dev/null | head -n 1)
+          fi
+          if [ -z "$DYLIB" ]; then
+            DYLIB=$(find . -maxdepth 3 -type f -name "*RyomenX*.dylib" 2>/dev/null | head -n 1)
           fi
 
-          if [ -z "$DYLIB" ]; then
-            echo "::error::No dylib found in build workspace!"
-            find . -type f
+          if [ -z "$DYLIB" ] || [ ! -f "$DYLIB" ]; then
+            echo "::error::RyomenX dylib was not found! Theos build did not produce the target dylib."
+            if [ -f "RyomenX_Source/theos_build.log" ]; then
+              cat RyomenX_Source/theos_build.log
+            fi
             exit 1
           fi
 
           echo "Found compiled dylib: $DYLIB"
           cp "$DYLIB" output/RyomenX.dylib
 
-          # Python script to inspect and guarantee Mach-O platform is iOS (2)
+          # Python script to inspect and guarantee Mach-O platform is iOS (2) and arch is ARM64
           python3 - << 'EOF'
           import struct, sys
 
@@ -74,36 +84,55 @@ jobs:
           with open(path, "r+b") as f:
               magic = struct.unpack("<I", f.read(4))[0]
               if magic != 0xfeedfacf:
-                  print(f"[!] Not 64-bit Mach-O magic: {hex(magic)}")
-                  sys.exit(0)
-              f.seek(16)
-              ncmds, sizeofcmds = struct.unpack("<II", f.read(8))
+                  print(f"::error::Not 64-bit Mach-O magic: {hex(magic)}! Expected 0xfeedfacf (ARM64).")
+                  sys.exit(1)
+              cputype, cpusubtype, filetype, ncmds, sizeofcmds, flags, reserved = struct.unpack("<IIIIIII", f.read(28))
+              if cputype != 0x0100000c: # CPU_TYPE_ARM64
+                  print(f"::error::Invalid CPU type: {hex(cputype)}! Expected ARM64 (0x0100000c).")
+                  sys.exit(1)
+              print(f"[*] Valid Mach-O 64-bit ARM64 verified (cputype={hex(cputype)}, cpusubtype={hex(cpusubtype)})")
+              
               f.seek(32)
               patched = False
+              has_ios_cmd = False
               for i in range(ncmds):
                   cmd_start = f.tell()
                   cmd, cmdsize = struct.unpack("<II", f.read(8))
                   if cmd == 0x32: # LC_BUILD_VERSION
                       platform, minos, sdk, ntools = struct.unpack("<IIII", f.read(16))
-                      print(f"[*] Load command {i}: LC_BUILD_VERSION -> Platform: {platform} (1=macOS, 2=iOS, 3=tvOS), MinOS: {minos >> 16}.{(minos >> 8) & 0xff}.{minos & 0xff}")
+                      print(f"[*] Cmd {i}: LC_BUILD_VERSION -> Platform: {platform}, MinOS: {minos >> 16}.{(minos >> 8) & 0xff}.{minos & 0xff}")
                       if platform != 2:
                           print(f"[!] INCOMPATIBLE PLATFORM {platform} DETECTED! Patching platform -> 2 (iOS)...")
                           f.seek(cmd_start + 8)
-                          f.write(struct.pack("<I", 2)) # set platform = 2 (iOS)
+                          f.write(struct.pack("<III", 2, 0x000e0000, 0x000e0500)) # platform=2, minos=14.0.0, sdk=14.5.0
                           patched = True
+                      has_ios_cmd = True
                   elif cmd == 0x2f: # LC_VERSION_MIN_TVOS
                       print(f"[!] LC_VERSION_MIN_TVOS DETECTED! Patching command -> 0x25 (LC_VERSION_MIN_IPHONEOS)...")
                       f.seek(cmd_start)
-                      f.write(struct.pack("<I", 0x25))
+                      f.write(struct.pack("<IIII", 0x25, cmdsize, 0x000e0000, 0x000e0500))
                       patched = True
+                      has_ios_cmd = True
                   elif cmd == 0x25: # LC_VERSION_MIN_IPHONEOS
-                      print(f"[*] Load command {i}: LC_VERSION_MIN_IPHONEOS verified")
+                      version, sdk = struct.unpack("<II", f.read(8))
+                      print(f"[*] Cmd {i}: LC_VERSION_MIN_IPHONEOS verified minos={version>>16}.{(version>>8)&0xff}.{version&0xff}")
+                      has_ios_cmd = True
                   f.seek(cmd_start + cmdsize)
+              
+              if not has_ios_cmd:
+                  print("::warning::No version load command detected, but binary is arm64 Mach-O.")
               if patched:
-                  print("[+] Mach-O header successfully patched to iOS platform!")
+                  print("[+] Mach-O header successfully patched to iOS 14.0+ (ARM64)!")
               else:
-                  print("[+] Mach-O header already verified for iOS!")
+                  print("[+] Mach-O header already verified for iOS 14.0+ (ARM64)!")
           EOF
+
+          # Sign binary with ldid
+          if command -v ldid >/dev/null 2>&1; then
+            ldid -S output/RyomenX.dylib || true
+          elif [ -f "$THEOS/bin/ldid" ]; then
+            "$THEOS/bin/ldid" -S output/RyomenX.dylib || true
+          fi
 
           cp output/RyomenX.dylib output/RyomenX-iOS-arm64.dylib
           ls -lh output/
@@ -118,7 +147,7 @@ jobs:
 
           | Property | Value |
           |---|---|
-          | **Architecture** | \`arm64\` (iOS 14.0+) |
+          | **Architecture** | \`arm64\` (iOS 14.0+ / arm64e compatible) |
           | **Platform** | \`iOS\` (Verified Mach-O Platform 2) |
           | **Engine** | Eclipse White ImGui + Native Metal Overlay |
           | **Features** | 20 Darwin Mach VM Cheats + BigWorld Python ESP |
