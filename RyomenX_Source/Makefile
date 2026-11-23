@@ -15,7 +15,7 @@ RyomenX_FILES = \
     src/MachMemory.cpp \
     src/MemoryCheats.cpp \
     src/PythonBridge.cpp \
-    src/Config.cpp \
+    src/Config.mm \
     imgui/imgui.cpp \
     imgui/imgui_draw.cpp \
     imgui/imgui_tables.cpp \
