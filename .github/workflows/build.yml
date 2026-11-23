@@ -8,128 +8,80 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-fast-linux:
-    name: Fast iOS Build (Ubuntu Cloud)
+  build-theos:
+    name: Build RyomenX iOS arm64 Dylib
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Detect Source Directory
-        id: detect
+      - name: Setup Theos
+        uses: Randomblock1/theos-action@v1
+
+      - name: Download ImGui & Official iOS SDKs
         run: |
+          echo "[*] Ensuring iOS SDK is loaded into Theos..."
+          git clone --depth 1 https://github.com/theos/sdks.git /tmp/sdks
+          sudo cp -r /tmp/sdks/*.sdk "$THEOS/sdks/" || true
+          ls -la "$THEOS/sdks/"
+
+          # Detect source folder
           if [ -d "RyomenX_Source" ]; then
-            echo "src_dir=RyomenX_Source" >> "$GITHUB_OUTPUT"
-          else
-            echo "src_dir=." >> "$GITHUB_OUTPUT"
+            cd RyomenX_Source
           fi
 
-      - name: Install Clang & Build Tools
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y clang lld llvm curl git make cmake libc++-dev libc++abi-dev libssl-dev libplist-dev
+          echo "[*] Downloading Dear ImGui v1.90.4..."
+          git clone --depth 1 --branch v1.90.4 https://github.com/ocornut/imgui.git imgui
 
-      - name: Download Apple iOS SDK & ImGui
-        run: |
-          SRC_DIR="${{ steps.detect.outputs.src_dir }}"
-          echo "[*] Downloading Apple iOS 14.5 SDK..."
-          git clone --depth 1 https://github.com/theos/sdks.git ~/sdks
-
-          echo "[*] Downloading Dear ImGui..."
-          git clone --depth 1 --branch v1.90.4 https://github.com/ocornut/imgui.git /tmp/imgui
-
-          echo "[*] Compiling ldid..."
-          git clone --depth 1 https://github.com/ProcursusTeam/ldid.git ~/ldid
-          cd ~/ldid && make && sudo cp ldid /usr/local/bin/ && cd -
-          ldid -v || true
-
-      - name: Cross-Compile RyomenX.dylib for iOS (arm64)
-        run: |
-          SRC_DIR="${{ steps.detect.outputs.src_dir }}"
-          echo "[*] Compiling RyomenX.dylib for iOS arm64 using Apple Clang & iOS 14.5 SDK..."
-
-          clang++ -target arm64-apple-ios14.0 \
-            -isysroot ~/sdks/iPhoneOS14.5.sdk \
-            -stdlib=libc++ \
-            -O3 -std=c++17 -fobjc-arc \
-            -I"${SRC_DIR}/include" \
-            -I/tmp/imgui \
-            -I/tmp/imgui/backends \
-            -shared -fPIC -fuse-ld=lld \
-            -framework UIKit -framework Metal -framework MetalKit \
-            -framework QuartzCore -framework Foundation -framework Security \
-            -o RyomenX.dylib \
-            "${SRC_DIR}/src/Main.mm" \
-            "${SRC_DIR}/src/RyomenXOverlayView.mm" \
-            "${SRC_DIR}/src/StealthBypass.mm" \
-            "${SRC_DIR}/src/Menu.cpp" \
-            "${SRC_DIR}/src/IosUI.cpp" \
-            "${SRC_DIR}/src/OverlayMath.cpp" \
-            "${SRC_DIR}/src/MachMemory.cpp" \
-            "${SRC_DIR}/src/MemoryCheats.cpp" \
-            "${SRC_DIR}/src/PythonBridge.cpp" \
-            "${SRC_DIR}/src/Config.cpp" \
-            /tmp/imgui/imgui.cpp \
-            /tmp/imgui/imgui_draw.cpp \
-            /tmp/imgui/imgui_tables.cpp \
-            /tmp/imgui/imgui_widgets.cpp \
-            /tmp/imgui/backends/imgui_impl_metal.mm
-
-          strip -x RyomenX.dylib || true
-          ldid -S RyomenX.dylib || true
-          ls -lh RyomenX.dylib
-          file RyomenX.dylib || true
-
-      - name: Upload RyomenX.dylib (Linux Build)
-        uses: actions/upload-artifact@v4
-        with:
-          name: RyomenX-iOS-arm64-dylib-FastLinux
-          path: RyomenX.dylib
-
-  build-macos:
-    name: macOS Apple Silicon Build
-    runs-on: macos-14
-    continue-on-error: true
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Detect Source Directory
-        id: detect
+      - name: Compile RyomenX.dylib with Theos
         run: |
           if [ -d "RyomenX_Source" ]; then
-            echo "src_dir=RyomenX_Source" >> "$GITHUB_OUTPUT"
-          else
-            echo "src_dir=." >> "$GITHUB_OUTPUT"
+            cd RyomenX_Source
+          fi
+          echo "[*] Compiling with Theos..."
+          make FINALPACKAGE=1
+
+      - name: Locate & Verify Dylib
+        run: |
+          mkdir -p output
+          DYLIB=$(find . -name "RyomenX.dylib" -type f | grep -E "(\.theos|obj)" | head -n 1)
+          if [ -z "$DYLIB" ]; then
+            DYLIB=$(find . -name "RyomenX.dylib" -type f | head -n 1)
           fi
 
-      - name: Setup Tools & Xcode
+          if [ -z "$DYLIB" ]; then
+            echo "::error::RyomenX.dylib was not created!"
+            exit 1
+          fi
+
+          echo "Found compiled dylib: $DYLIB"
+          cp "$DYLIB" output/RyomenX.dylib
+          ls -lh output/RyomenX.dylib
+          file output/RyomenX.dylib
+
+      - name: Generate Summary
         run: |
-          sudo xcode-select -s /Applications/Xcode_15.4.app || sudo xcode-select -s /Applications/Xcode.app
-          brew install cmake ldid ninja
+          SHA256=$(sha256sum output/RyomenX.dylib | awk '{print $1}')
+          FILESIZE=$(ls -lh output/RyomenX.dylib | awk '{print $5}')
+          cat <<EOF >> "$GITHUB_STEP_SUMMARY"
+          # 🚀 RyomenX VIP iOS Dylib Build Complete
 
-      - name: Build with CMake (iOS arm64)
-        run: |
-          SRC_DIR="${{ steps.detect.outputs.src_dir }}"
-          cmake -B build -S "$SRC_DIR" \
-            -G Xcode \
-            -DCMAKE_SYSTEM_NAME=iOS \
-            -DCMAKE_OSX_SYSROOT=iphoneos \
-            -DCMAKE_OSX_ARCHITECTURES=arm64 \
-            -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0 \
-            -DCMAKE_BUILD_TYPE=Release
+          | Property | Value |
+          |---|---|
+          | **Architecture** | \`arm64\` (iOS 14.0+) |
+          | **Engine** | Eclipse White ImGui + Native Metal Overlay |
+          | **Features** | 20 Darwin Mach VM Cheats + BigWorld Python ESP |
+          | **File Size** | \`${FILESIZE}\` |
+          | **SHA256** | \`${SHA256}\` |
+          | **Status** | Ready for Sideloading |
 
-          cmake --build build --config Release -- -quiet
+          ### 📲 Sideloading Instructions:
+          Download **\`RyomenX-iOS-arm64-dylib\`** from the Artifacts below and inject into Rules of Survival IPA with **Azule**, **Sideloadly**, or **Esign**.
+          EOF
 
-      - name: Sign & Package
-        run: |
-          DYLIB=$(find build -name "RyomenX.dylib" -type f | head -n 1)
-          cp "$DYLIB" ./RyomenX-macos.dylib
-          codesign --force --deep --sign - ./RyomenX-macos.dylib
-          ldid -S ./RyomenX-macos.dylib
-
-      - name: Upload RyomenX.dylib (macOS Build)
+      - name: Upload RyomenX.dylib Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: RyomenX-iOS-arm64-dylib-macOS
-          path: ./RyomenX-macos.dylib
+          name: RyomenX-iOS-arm64-dylib
+          path: output/RyomenX.dylib
+          retention-days: 14

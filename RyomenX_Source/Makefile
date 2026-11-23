@@ -15,9 +15,14 @@ RyomenX_FILES = \
     src/MachMemory.cpp \
     src/MemoryCheats.cpp \
     src/PythonBridge.cpp \
-    src/Config.cpp
+    src/Config.cpp \
+    imgui/imgui.cpp \
+    imgui/imgui_draw.cpp \
+    imgui/imgui_tables.cpp \
+    imgui/imgui_widgets.cpp \
+    imgui/backends/imgui_impl_metal.mm
 
 RyomenX_FRAMEWORKS = UIKit Metal MetalKit Foundation QuartzCore Security
-RyomenX_CFLAGS = -fobjc-arc -Iinclude -std=c++17 -O2
+RyomenX_CFLAGS = -fobjc-arc -Iinclude -Iimgui -Iimgui/backends -std=c++17 -O2
 
 include $(THEOS_MAKE_PATH)/tweak.mk
