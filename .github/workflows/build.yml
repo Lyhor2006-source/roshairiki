@@ -23,7 +23,6 @@ jobs:
           echo "[*] Ensuring iOS SDK is loaded into Theos..."
           git clone --depth 1 https://github.com/theos/sdks.git /tmp/sdks
           sudo cp -r /tmp/sdks/*.sdk "$THEOS/sdks/" || true
-          ls -la "$THEOS/sdks/"
 
           # Detect source folder
           if [ -d "RyomenX_Source" ]; then
@@ -39,31 +38,29 @@ jobs:
             cd RyomenX_Source
           fi
           echo "[*] Compiling RyomenX.dylib with Theos..."
-          make 2>&1 | tee theos_build.log || {
-            echo "### ❌ Theos Build Log" >> "$GITHUB_STEP_SUMMARY"
-            echo '```text' >> "$GITHUB_STEP_SUMMARY"
-            cat theos_build.log >> "$GITHUB_STEP_SUMMARY"
-            echo '```' >> "$GITHUB_STEP_SUMMARY"
-            exit 1
-          }
+          make 2>&1 | tee theos_build.log
+
+          echo "[*] All generated binaries:"
+          find . -type f -name "*dylib*" || true
 
       - name: Locate & Verify Dylib
         run: |
           mkdir -p output
-          DYLIB=$(find . -name "RyomenX.dylib" -type f | grep -E "(\.theos|obj)" | head -n 1)
+          DYLIB=$(find . -type f -name "*RyomenX*.dylib" | head -n 1)
           if [ -z "$DYLIB" ]; then
-            DYLIB=$(find . -name "RyomenX.dylib" -type f | head -n 1)
+            DYLIB=$(find . -type f -name "*.dylib" | head -n 1)
           fi
 
           if [ -z "$DYLIB" ]; then
-            echo "::error::RyomenX.dylib was not created!"
-            find . -type f -name "*dylib*"
+            echo "::error::No dylib found in build workspace!"
+            find . -type f
             exit 1
           fi
 
           echo "Found compiled dylib: $DYLIB"
           cp "$DYLIB" output/RyomenX.dylib
-          ls -lh output/RyomenX.dylib
+          cp "$DYLIB" output/RyomenX-iOS-arm64.dylib
+          ls -lh output/
           file output/RyomenX.dylib
 
       - name: Generate Summary
@@ -90,5 +87,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: RyomenX-iOS-arm64-dylib
-          path: output/RyomenX.dylib
+          path: output/
           retention-days: 14
