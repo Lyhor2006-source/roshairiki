@@ -16,6 +16,8 @@ static inline constexpr const T& clamp_val(const T& v, const T& lo, const T& hi)
 
 namespace Menu
 {
+    using namespace RyomenX;
+
     static const char* kTitle = "ECLIPSE VIP";
     static const char* kVersion = "v1.0 (arm64)";
 
@@ -529,17 +531,17 @@ namespace Menu
         SliderRow("Menu Scale", &cfg.menuScale, 0.8f, 1.4f, "%.2f x");
 
         Section("ANTI-DETECTION & DEVICE ID");
-        bool stealthOk = StealthBypass::IsStealthActive();
+        bool stealthOk = RyomenX::StealthBypass::IsStealthActive();
         ImGui::Text("Stealth Protection: ");
         ImGui::SameLine();
         ImGui::TextColored(stealthOk ? ImVec4(0.06f, 0.73f, 0.51f, 1.0f) : ImVec4(0.93f, 0.26f, 0.30f, 1.0f),
                            stealthOk ? "ACTIVE (Jailbreak & Dylib Masked)" : "INITIALIZING");
 
-        std::string idfv = StealthBypass::GetDeviceIDFV();
+        std::string idfv = RyomenX::StealthBypass::GetDeviceIDFV();
         ImGui::Text("Device IDFV: %s", idfv.c_str());
 
         if (ImGui::Button("Randomize Device ID (Instant Unban)", ImVec2(-RightPad(), 0))) {
-            StealthBypass::RandomizeDeviceIDFV();
+            RyomenX::StealthBypass::RandomizeDeviceIDFV();
         }
         ImGui::TextDisabled("Generates clean synthetic vendor UUID to bypass device hardware bans.");
     }
