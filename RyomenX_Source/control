@@ -1,0 +1,8 @@
+Package: com.ryomenx.ros
+Name: RyomenX
+Version: 1.0.0
+Architecture: iphoneos-arm
+Description: RyomenX VIP ROS
+Maintainer: Ryomen
+Author: Ryomen
+Section: Tweaks

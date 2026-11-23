@@ -3,7 +3,7 @@ ARCHS = arm64
 
 include $(THEOS)/makefiles/common.mk
 
-TWEAK_NAME = RyomenX
+LIBRARY_NAME = RyomenX
 
 RyomenX_FILES = \
     src/Main.mm \
@@ -23,6 +23,7 @@ RyomenX_FILES = \
     imgui/backends/imgui_impl_metal.mm
 
 RyomenX_FRAMEWORKS = UIKit Metal MetalKit Foundation QuartzCore Security
-RyomenX_CFLAGS = -fobjc-arc -Iinclude -Iimgui -Iimgui/backends -std=c++17 -O2
+RyomenX_CFLAGS = -fobjc-arc -Iinclude -Iimgui -Iimgui/backends -O2
+RyomenX_CXXFLAGS = -std=c++17 -fobjc-arc -Iinclude -Iimgui -Iimgui/backends -O2
 
-include $(THEOS_MAKE_PATH)/tweak.mk
+include $(THEOS_MAKE_PATH)/library.mk
