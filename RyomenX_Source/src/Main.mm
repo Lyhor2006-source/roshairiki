@@ -57,34 +57,34 @@ static void AttachOverlayToWindow() {
 // Dylib Constructor: Injected automatically upon Mach-O load
 __attribute__((constructor))
 static void RyomenX_Init() {
-    // 1. Initialize Anti-Detection & IDFV Bypass
-    RyomenX::StealthBypass::Initialize();
+    // Defer initialization to main queue after UIKit and dyld have fully settled
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        // 1. Initialize Anti-Detection & IDFV Bypass
+        RyomenX::StealthBypass::Initialize();
 
-    // 2. Initialize Memory Cheats Engine
-    MemoryCheats::Initialize();
+        // 2. Setup sandbox cache directory: Library/Caches/RyomenX
+        NSArray* paths = NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES);
+        NSString* cache_base = paths.firstObject ? paths.firstObject : NSTemporaryDirectory();
+        NSString* ryomen_dir = [cache_base stringByAppendingPathComponent:@"RyomenX"];
 
-    // 3. Setup sandbox cache directory: Library/Caches/RyomenX
-    NSArray* paths = NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES);
-    NSString* cache_base = paths.firstObject;
-    NSString* ryomen_dir = [cache_base stringByAppendingPathComponent:@"RyomenX"];
+        [[NSFileManager defaultManager] createDirectoryAtPath:ryomen_dir
+                                  withIntermediateDirectories:YES
+                                                   attributes:nil
+                                                        error:nil];
 
-    [[NSFileManager defaultManager] createDirectoryAtPath:ryomen_dir
-                              withIntermediateDirectories:YES
-                                               attributes:nil
-                                                    error:nil];
+        std::string cache_dir_std = ryomen_dir.UTF8String;
+        MemoryCheats::SetDiagnosticsDirectory(cache_dir_std);
 
-    std::string cache_dir_std = ryomen_dir.UTF8String;
-    MemoryCheats::SetDiagnosticsDirectory(cache_dir_std);
+        // 3. Initialize Memory Cheats Engine
+        MemoryCheats::Initialize();
 
-    // 4. Spawn Python Bridge Worker in background thread
-    std::thread([cache_dir_std]() {
-        // Wait for game process and Python runtime to fully initialize
-        std::this_thread::sleep_for(std::chrono::seconds(3));
-        RyomenX::PythonBridge::Get().Initialize(cache_dir_std);
-    }).detach();
+        // 4. Spawn Python Bridge Worker safely outside dyld lock
+        std::thread([cache_dir_std]() {
+            std::this_thread::sleep_for(std::chrono::seconds(2));
+            RyomenX::PythonBridge::Get().Initialize(cache_dir_std);
+        }).detach();
 
-    // 5. Attach Metal UI Overlay to Main Window
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        // 5. Attach Metal UI Overlay to Main Window
         AttachOverlayToWindow();
     });
 }

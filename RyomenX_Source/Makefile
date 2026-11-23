@@ -1,5 +1,5 @@
-TARGET = iphone:clang:latest:14.0
-ARCHS = arm64
+TARGET := iphone:clang:14.5:14.0
+ARCHS := arm64
 
 include $(THEOS)/makefiles/common.mk
 
@@ -23,7 +23,8 @@ RyomenX_FILES = \
     imgui/backends/imgui_impl_metal.mm
 
 RyomenX_FRAMEWORKS = UIKit Metal MetalKit Foundation QuartzCore Security
-RyomenX_CFLAGS = -fobjc-arc -Iinclude -Iimgui -Iimgui/backends -O2
-RyomenX_CXXFLAGS = -std=c++17 -fobjc-arc -Iinclude -Iimgui -Iimgui/backends -O2
+RyomenX_CFLAGS = -fobjc-arc -Iinclude -Iimgui -Iimgui/backends -O2 -target arm64-apple-ios14.0 -miphoneos-version-min=14.0
+RyomenX_CXXFLAGS = -std=c++17 -fobjc-arc -Iinclude -Iimgui -Iimgui/backends -O2 -target arm64-apple-ios14.0 -miphoneos-version-min=14.0
+RyomenX_LDFLAGS = -target arm64-apple-ios14.0 -miphoneos-version-min=14.0
 
 include $(THEOS_MAKE_PATH)/library.mk

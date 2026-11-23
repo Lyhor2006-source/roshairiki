@@ -84,6 +84,7 @@ bool PythonBridge::ExecutePayload(const std::string& python_code) {
 }
 
 void PythonBridge::WriteConfigSync() {
+    if (m_cache_dir.empty()) return;
     const auto& s = Settings::Get();
 
     // 1. Write aim_cfg.txt for Python aimbot loop

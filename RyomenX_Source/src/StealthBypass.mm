@@ -13,23 +13,26 @@ static std::string s_custom_idfv = "";
 
 #if defined(__APPLE__)
 
-static NSString* (*orig_identifierForVendor)(id, SEL) = nullptr;
+static NSUUID* (*orig_identifierForVendor)(id, SEL) = nullptr;
 static BOOL (*orig_fileExistsAtPath)(id, SEL, NSString*) = nullptr;
 
-static NSString* hooked_identifierForVendor(id self, SEL _cmd) {
+static NSUUID* hooked_identifierForVendor(id self, SEL _cmd) {
     if (!s_custom_idfv.empty()) {
-        return [NSString stringWithUTF8String:s_custom_idfv.c_str()];
+        NSString* uuid_str = [NSString stringWithUTF8String:s_custom_idfv.c_str()];
+        NSUUID* custom_uuid = [[NSUUID alloc] initWithUUIDString:uuid_str];
+        if (custom_uuid) return custom_uuid;
     }
     NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
     NSString* saved = [defaults stringForKey:@"RyomenX.SpoofedIDFV"];
     if (saved) {
-        return saved;
+        NSUUID* saved_uuid = [[NSUUID alloc] initWithUUIDString:saved];
+        if (saved_uuid) return saved_uuid;
     }
-    return orig_identifierForVendor(self, _cmd);
+    return orig_identifierForVendor ? orig_identifierForVendor(self, _cmd) : nil;
 }
 
 static BOOL hooked_fileExistsAtPath(id self, SEL _cmd, NSString* path) {
-    if (path) {
+    if (path && [path isKindOfClass:[NSString class]]) {
         // Hide common jailbreak detection paths
         if ([path containsString:@"Cydia.app"] ||
             [path containsString:@"Sileo.app"] ||
@@ -52,7 +55,7 @@ void Initialize() {
     Class uiDeviceClass = [UIDevice class];
     Method idfvMethod = class_getInstanceMethod(uiDeviceClass, @selector(identifierForVendor));
     if (idfvMethod) {
-        orig_identifierForVendor = (NSString* (*)(id, SEL))method_getImplementation(idfvMethod);
+        orig_identifierForVendor = (NSUUID* (*)(id, SEL))method_getImplementation(idfvMethod);
         method_setImplementation(idfvMethod, (IMP)hooked_identifierForVendor);
     }
 
@@ -72,7 +75,8 @@ void Initialize() {
 
 std::string GetDeviceIDFV() {
 #if defined(__APPLE__)
-    return [[[UIDevice currentDevice] identifierForVendor] UUIDString].UTF8String;
+    NSUUID* idfv = [[UIDevice currentDevice] identifierForVendor];
+    return idfv ? idfv.UUIDString.UTF8String : "00000000-0000-0000-0000-000000000000";
 #else
     return "00000000-0000-0000-0000-000000000000";
 #endif
