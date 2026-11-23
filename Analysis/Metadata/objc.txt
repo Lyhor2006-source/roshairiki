@@ -1,0 +1,6 @@
+   address        min        max name                  super    
+――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――
+[33m0x0010cbf0[0m [33m0x00047ea8[0m [33m0x00047fb8[0m [31mMetalBuffer           [0m[36mNSObject[0m
+[33m0x0010cc18[0m [33m0x00047fc4[0m [33m0x00048508[0m [31mFramebufferDescriptor [0m[36mNSObject[0m
+[33m0x0010cc40[0m [33m0x00048510[0m [33m0x0004a64c[0m [31mMetalContext          [0m[36mNSObject[0m
+[33m0x0010cc90[0m [33m0x000675e4[0m [33m0x0006847c[0m [31mRyomenXOverlayView    [0m[36mMTKView[0m
