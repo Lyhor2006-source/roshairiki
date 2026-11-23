@@ -46,7 +46,12 @@ jobs:
           make clean || true
           set -o pipefail
           make 2>&1 | tee theos_build.log || {
+            echo "### ❌ Theos Build Log" >> "$GITHUB_STEP_SUMMARY"
+            echo '```text' >> "$GITHUB_STEP_SUMMARY"
+            cat theos_build.log >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
             echo "::error::Theos compilation failed!"
+            cat theos_build.log
             exit 1
           }
 
@@ -57,10 +62,7 @@ jobs:
         run: |
           mkdir -p output
           # Look specifically in RyomenX_Source/.theos/obj or RyomenX_Source
-          DYLIB=$(find RyomenX_Source/.theos RyomenX_Source/obj .theos obj -type f \( -name "*RyomenX*.dylib" -o -name "libRyomenX.dylib" \) 2>/dev/null | head -n 1)
-          if [ -z "$DYLIB" ]; then
-            DYLIB=$(find RyomenX_Source -type f -name "*RyomenX*.dylib" 2>/dev/null | head -n 1)
-          fi
+          DYLIB=$(find RyomenX_Source/.theos RyomenX_Source/obj .theos obj RyomenX_Source -type f \( -name "*RyomenX*.dylib" -o -name "libRyomenX.dylib" \) 2>/dev/null | head -n 1)
           if [ -z "$DYLIB" ]; then
             DYLIB=$(find . -maxdepth 3 -type f -name "*RyomenX*.dylib" 2>/dev/null | head -n 1)
           fi

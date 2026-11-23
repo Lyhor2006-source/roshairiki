@@ -1,6 +1,7 @@
 #include "StealthBypass.hpp"
 
 #if defined(__APPLE__)
+#import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 #endif
