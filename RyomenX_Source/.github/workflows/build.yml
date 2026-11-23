@@ -26,8 +26,9 @@ jobs:
           sudo rm -rf /tmp/sdks/AppleTVOS* /tmp/sdks/WatchOS* "$THEOS/sdks/AppleTVOS"* "$THEOS/sdks/WatchOS"* || true
           # Copy ONLY iPhoneOS SDKs
           sudo cp -r /tmp/sdks/iPhoneOS*.sdk "$THEOS/sdks/" || true
-          echo "[*] Available Theos SDKs in $THEOS/sdks:"
-          ls -la "$THEOS/sdks/"
+          SDKS_LIST=$(ls "$THEOS/sdks/")
+          echo "[*] Available Theos SDKs in $THEOS/sdks: $SDKS_LIST"
+          echo "::notice title=AvailableSDKs::$SDKS_LIST"
 
           # Detect source folder
           if [ -d "RyomenX_Source" ]; then
@@ -51,7 +52,12 @@ jobs:
             cat theos_build.log >> "$GITHUB_STEP_SUMMARY"
             echo '```' >> "$GITHUB_STEP_SUMMARY"
             echo "::error::Theos compilation failed!"
-            cat theos_build.log
+            while IFS= read -r line; do
+              [ -n "$line" ] && echo "::error title=TheosBuild::$line"
+            done < <(head -n 25 theos_build.log)
+            while IFS= read -r line; do
+              [ -n "$line" ] && echo "::error title=TheosBuildTail::$line"
+            done < <(tail -n 25 theos_build.log)
             exit 1
           }
 
