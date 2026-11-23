@@ -22,9 +22,11 @@ RyomenX_FILES = \
     imgui/imgui_widgets.cpp \
     imgui/backends/imgui_impl_metal.mm
 
-RyomenX_FRAMEWORKS = UIKit Metal MetalKit Foundation QuartzCore Security
-RyomenX_CFLAGS = -fobjc-arc -Iinclude -Iimgui -Iimgui/backends -O2 -Wno-error -Wno-unused-variable -Wno-unused-function -Wno-unused-parameter
-RyomenX_CCFLAGS = -std=c++17 -fobjc-arc -Iinclude -Iimgui -Iimgui/backends -O2 -Wno-error -Wno-unused-variable -Wno-unused-function -Wno-unused-parameter
-RyomenX_CXXFLAGS = -std=c++17 -fobjc-arc -Iinclude -Iimgui -Iimgui/backends -O2 -Wno-error -Wno-unused-variable -Wno-unused-function -Wno-unused-parameter
+RyomenX_FRAMEWORKS = UIKit Metal MetalKit Foundation QuartzCore Security CoreGraphics
+RyomenX_CFLAGS = -w -fobjc-arc -Iinclude -Iimgui -Iimgui/backends -O2 -Wno-error
+RyomenX_CCFLAGS = -w -std=c++17 -fobjc-arc -Iinclude -Iimgui -Iimgui/backends -O2 -Wno-error
+RyomenX_CXXFLAGS = -w -std=c++17 -fobjc-arc -Iinclude -Iimgui -Iimgui/backends -O2 -Wno-error
+RyomenX_OBJCFLAGS = -w -fobjc-arc -Iinclude -Iimgui -Iimgui/backends -O2 -Wno-error
+RyomenX_OBJCCFLAGS = -w -std=c++17 -fobjc-arc -Iinclude -Iimgui -Iimgui/backends -O2 -Wno-error
 
 include $(THEOS_MAKE_PATH)/library.mk

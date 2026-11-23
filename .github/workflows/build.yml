@@ -53,6 +53,9 @@ jobs:
             echo '```' >> "$GITHUB_STEP_SUMMARY"
             echo "::error::Theos compilation failed!"
             while IFS= read -r line; do
+              [ -n "$line" ] && echo "::error title=TheosError::$line"
+            done < <(grep -E "(error:|fatal error:)" theos_build.log | head -n 15)
+            while IFS= read -r line; do
               [ -n "$line" ] && echo "::error title=TheosBuild::$line"
             done < <(head -n 25 theos_build.log)
             while IFS= read -r line; do

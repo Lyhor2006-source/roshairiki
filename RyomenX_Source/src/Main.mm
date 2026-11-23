@@ -32,7 +32,13 @@ static void AttachOverlayToWindow() {
         }
 
         if (!key_window) {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
             key_window = [UIApplication sharedApplication].keyWindow;
+#pragma clang diagnostic pop
+        }
+        if (!key_window) {
+            key_window = [UIApplication sharedApplication].windows.firstObject;
         }
 
         if (!key_window) {
