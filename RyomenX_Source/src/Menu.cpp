@@ -9,6 +9,11 @@
 #include <algorithm>
 #include <string>
 
+template <typename T>
+static inline constexpr const T& clamp_val(const T& v, const T& lo, const T& hi) {
+    return (v < lo) ? lo : ((hi < v) ? hi : v);
+}
+
 namespace Menu
 {
     static const char* kTitle = "ECLIPSE VIP";
@@ -175,13 +180,13 @@ namespace Menu
         if (active && span > 0.0f)
         {
             float t = (ImGui::GetIO().MousePos.x - (p.x + r)) / (rowW - r * 2.0f);
-            t = std::clamp(t, 0.0f, 1.0f);
+            t = clamp_val(t, 0.0f, 1.0f);
             float nv = lo + t * span;
             if (step > 0.0f) nv = lo + std::round((nv - lo) / step) * step;
-            nv = std::clamp(nv, lo, hi);
+            nv = clamp_val(nv, lo, hi);
             if (nv != *v) { *v = nv; changed = true; }
         }
-        *v = std::clamp(*v, lo, hi);
+        *v = clamp_val(*v, lo, hi);
 
         const float t  = span > 0.0f ? (*v - lo) / span : 0.0f;
         const float x0 = p.x + r;
@@ -578,7 +583,7 @@ namespace Menu
         ImGuiIO& io = ImGui::GetIO();
         const float u = ImGui::GetFontSize();
 
-        ImGui::GetStyle().Alpha = std::clamp(cfg.menuOpacity, 0.5f, 1.0f);
+        ImGui::GetStyle().Alpha = clamp_val(cfg.menuOpacity, 0.5f, 1.0f);
 
         const ImVec2 size(std::min(io.DisplaySize.x * 0.94f, u * 56.0f * cfg.menuScale),
                           std::min(io.DisplaySize.y * 0.88f, u * 34.0f * cfg.menuScale));

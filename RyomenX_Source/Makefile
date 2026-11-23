@@ -24,6 +24,7 @@ RyomenX_FILES = \
 
 RyomenX_FRAMEWORKS = UIKit Metal MetalKit Foundation QuartzCore Security
 RyomenX_CFLAGS = -fobjc-arc -Iinclude -Iimgui -Iimgui/backends -O2
+RyomenX_CCFLAGS = -std=c++17 -fobjc-arc -Iinclude -Iimgui -Iimgui/backends -O2
 RyomenX_CXXFLAGS = -std=c++17 -fobjc-arc -Iinclude -Iimgui -Iimgui/backends -O2
 
 include $(THEOS_MAKE_PATH)/library.mk
