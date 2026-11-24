@@ -546,6 +546,8 @@ namespace Menu
         ImGui::TextDisabled("Generates clean synthetic vendor UUID to bypass device hardware bans.");
     }
 
+    static bool s_force_recenter = false;
+
     static void TabSettings(Config& cfg)
     {
         Section("ECLIPSE ACCENT THEME");
@@ -562,10 +564,16 @@ namespace Menu
         }
 
         Section("CONFIGURATION PERSISTENCE");
+        if (ImGui::Button("Re-center Menu on Screen", ImVec2(-RightPad(), 0)))
+        {
+            s_force_recenter = true;
+        }
+
         if (ImGui::Button("Reset to Defaults", ImVec2(-RightPad(), 0)))
         {
             cfg = Config();
             ApplyWhiteTheme(g_scale, ImVec4(cfg.accent[0], cfg.accent[1], cfg.accent[2], 1.0f));
+            s_force_recenter = true;
         }
 
         ImGui::Dummy(ImVec2(0, ImGui::GetFontSize() * 0.5f));
@@ -607,6 +615,7 @@ namespace Menu
         if (display_changed) {
             s_last_w = io.DisplaySize.x;
             s_last_h = io.DisplaySize.y;
+            s_has_centered = false; // Re-center on resolution/orientation change
         }
 
         bool scale_changed = (std::abs(cfg.menuScale - s_last_scale) > 0.03f);
@@ -615,14 +624,17 @@ namespace Menu
             ApplyWhiteTheme(activeScale, ImVec4(cfg.accent[0], cfg.accent[1], cfg.accent[2], 1.0f));
         }
 
-        // Center on initial valid landscape frame or orientation/scale change
-        if ((!s_has_centered || display_changed || scale_changed) &&
+        // Center on initial valid landscape frame or orientation/scale change or manual recenter
+        if ((!s_has_centered || s_force_recenter) &&
             io.DisplaySize.x > io.DisplaySize.y && io.DisplaySize.x > 400.0f) {
             ImGui::SetNextWindowPos(ImVec2((io.DisplaySize.x - targetW) * 0.5f,
                                            (io.DisplaySize.y - targetH) * 0.5f),
                                     ImGuiCond_Always);
             ImGui::SetNextWindowSize(size, ImGuiCond_Always);
             s_has_centered = true;
+            s_force_recenter = false;
+        } else if (scale_changed) {
+            ImGui::SetNextWindowSize(size, ImGuiCond_Always);
         } else {
             ImGui::SetNextWindowSize(size, ImGuiCond_FirstUseEver);
         }

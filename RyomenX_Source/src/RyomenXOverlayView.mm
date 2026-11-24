@@ -23,12 +23,43 @@ static bool s_menu_open = true;
 
 @implementation RyomenXOverlayView
 
+- (void)ensureLandscapeBoundsAndScale {
+    CGRect screenBounds = [UIScreen mainScreen].bounds;
+    CGFloat w = MAX(screenBounds.size.width, screenBounds.size.height);
+    CGFloat h = MIN(screenBounds.size.width, screenBounds.size.height);
+    CGRect target = CGRectMake(0, 0, w, h);
+
+    if (!CGRectEqualToRect(self.frame, target)) {
+        self.frame = target;
+        self.bounds = target;
+    }
+
+    CGFloat scale = [UIScreen mainScreen].scale;
+    if (scale < 1.0f) scale = 2.0f;
+    self.contentScaleFactor = scale;
+
+    CGSize targetDrawable = CGSizeMake(w * scale, h * scale);
+    if (!CGSizeEqualToSize(self.drawableSize, targetDrawable)) {
+        self.drawableSize = targetDrawable;
+    }
+}
+
 - (instancetype)initWithFrame:(CGRect)frame device:(id<MTLDevice>)device {
-    self = [super initWithFrame:frame device:device];
+    CGRect screenBounds = [UIScreen mainScreen].bounds;
+    CGFloat w = MAX(screenBounds.size.width, screenBounds.size.height);
+    CGFloat h = MIN(screenBounds.size.width, screenBounds.size.height);
+    CGRect landscapeFrame = CGRectMake(0, 0, w, h);
+
+    self = [super initWithFrame:landscapeFrame device:device];
     if (self) {
         self.device = device;
         self.command_queue = [device newCommandQueue];
         self.delegate = self;
+
+        CGFloat scale = [UIScreen mainScreen].scale;
+        if (scale < 1.0f) scale = 2.0f;
+        self.contentScaleFactor = scale;
+        self.drawableSize = CGSizeMake(w * scale, h * scale);
 
         self.backgroundColor = [UIColor clearColor];
         self.opaque = NO;
@@ -37,12 +68,14 @@ static bool s_menu_open = true;
         self.framebufferOnly = YES;
         self.userInteractionEnabled = YES;
         self.multipleTouchEnabled = YES;
+        self.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
 
         // Initialize Dear ImGui
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
         ImGuiIO& io = ImGui::GetIO();
-        io.DisplaySize = ImVec2(frame.size.width, frame.size.height);
+        io.DisplaySize = ImVec2(w, h);
+        io.DisplayFramebufferScale = ImVec2(scale, scale);
         io.IniFilename = nullptr; // Stateless configuration
 
         // Touch-friendly scaling for mobile retina display
@@ -156,8 +189,14 @@ static bool s_menu_open = true;
 
     if (!renderPassDesc || !drawable) return;
 
+    [self ensureLandscapeBoundsAndScale];
+
     ImGuiIO& io = ImGui::GetIO();
-    io.DisplaySize = ImVec2(view.bounds.size.width, view.bounds.size.height);
+    CGFloat scale = self.contentScaleFactor > 0.0f ? self.contentScaleFactor : [UIScreen mainScreen].scale;
+    if (scale < 1.0f) scale = 2.0f;
+
+    io.DisplaySize = ImVec2(self.bounds.size.width, self.bounds.size.height);
+    io.DisplayFramebufferScale = ImVec2(scale, scale);
 
     double current_time = CACurrentMediaTime();
     io.DeltaTime = self.last_frame_time > 0.0 ? (float)(current_time - self.last_frame_time) : (1.0f / 60.0f);

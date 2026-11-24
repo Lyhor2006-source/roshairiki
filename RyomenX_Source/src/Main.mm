@@ -50,12 +50,21 @@ static void AttachOverlayToWindow() {
             return;
         }
 
+        CGRect screenBounds = [UIScreen mainScreen].bounds;
+        CGFloat w = MAX(screenBounds.size.width, screenBounds.size.height);
+        CGFloat h = MIN(screenBounds.size.width, screenBounds.size.height);
+        CGRect landscapeFrame = CGRectMake(0, 0, w, h);
+
         if (!g_overlay_view) {
             id<MTLDevice> device = MTLCreateSystemDefaultDevice();
             if (!device) return;
 
-            g_overlay_view = [[RyomenXOverlayView alloc] initWithFrame:key_window.bounds device:device];
+            g_overlay_view = [[RyomenXOverlayView alloc] initWithFrame:landscapeFrame device:device];
+            g_overlay_view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
             [key_window addSubview:g_overlay_view];
+            [key_window bringSubviewToFront:g_overlay_view];
+        } else {
+            g_overlay_view.frame = landscapeFrame;
             [key_window bringSubviewToFront:g_overlay_view];
         }
 
