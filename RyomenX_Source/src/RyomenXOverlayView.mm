@@ -78,11 +78,10 @@ static bool s_menu_open = true;
         io.DisplayFramebufferScale = ImVec2(scale, scale);
         io.IniFilename = nullptr; // Stateless configuration
 
-        // Touch-friendly scaling for mobile retina display
-        io.FontGlobalScale = 1.35f;
+        io.FontGlobalScale = 1.0f;
 
-        // Setup Eclipse White Modern Theme scaled for mobile touch
-        Menu::ApplyWhiteTheme(1.35f, ImVec4(0.20f, 0.45f, 1.00f, 1.0f));
+        // Setup Eclipse White Modern Theme (base scale 1.0f)
+        Menu::ApplyWhiteTheme(1.0f, ImVec4(0.20f, 0.45f, 1.00f, 1.0f));
 
         ImGui_ImplMetal_Init(device);
 
@@ -179,12 +178,6 @@ static bool s_menu_open = true;
 #pragma mark - MTKViewDelegate
 
 - (void)mtkView:(MTKView*)view drawableSizeWillChange:(CGSize)size {
-    // size is in PIXELS (drawable), not points.  DisplaySize must be in points.
-    CGFloat scale = self.contentScaleFactor;
-    if (scale < 1.0f) scale = [UIScreen mainScreen].scale;
-    if (scale < 1.0f) scale = 2.0f;
-    ImGuiIO& io = ImGui::GetIO();
-    io.DisplaySize = ImVec2(size.width / scale, size.height / scale);
 }
 
 - (void)drawInMTKView:(MTKView*)view {
@@ -193,14 +186,24 @@ static bool s_menu_open = true;
 
     if (!renderPassDesc || !drawable) return;
 
-    [self ensureLandscapeBoundsAndScale];
-
     ImGuiIO& io = ImGui::GetIO();
-    CGFloat scale = self.contentScaleFactor > 0.0f ? self.contentScaleFactor : [UIScreen mainScreen].scale;
-    if (scale < 1.0f) scale = 2.0f;
 
-    io.DisplaySize = ImVec2(self.bounds.size.width, self.bounds.size.height);
-    io.DisplayFramebufferScale = ImVec2(scale, scale);
+    // Exact RyomenX display size & framebuffer scaling calculation
+    CGSize boundsSize = view.bounds.size;
+    CGSize drawSize = view.drawableSize;
+    if (boundsSize.width <= 0 || boundsSize.height <= 0) {
+        boundsSize = [UIScreen mainScreen].bounds.size;
+    }
+    CGFloat landscapeW = MAX(boundsSize.width, boundsSize.height);
+    CGFloat landscapeH = MIN(boundsSize.width, boundsSize.height);
+
+    io.DisplaySize = ImVec2(landscapeW, landscapeH);
+
+    CGFloat scaleX = (drawSize.width > 0 && landscapeW > 0) ? (MAX(drawSize.width, drawSize.height) / landscapeW) : [UIScreen mainScreen].scale;
+    CGFloat scaleY = (drawSize.height > 0 && landscapeH > 0) ? (MIN(drawSize.width, drawSize.height) / landscapeH) : [UIScreen mainScreen].scale;
+    if (scaleX < 1.0f) scaleX = 2.0f;
+    if (scaleY < 1.0f) scaleY = 2.0f;
+    io.DisplayFramebufferScale = ImVec2(scaleX, scaleY);
 
     double current_time = CACurrentMediaTime();
     io.DeltaTime = self.last_frame_time > 0.0 ? (float)(current_time - self.last_frame_time) : (1.0f / 60.0f);

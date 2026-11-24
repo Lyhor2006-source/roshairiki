@@ -592,23 +592,22 @@ namespace Menu
 
         ImGuiIO& io = ImGui::GetIO();
 
-        // Responsive mobile DPI scaling: base 1.35x for retina handheld screens
-        const float activeScale = 1.35f * clamp_val(cfg.menuScale, 0.8f, 1.6f);
-        io.FontGlobalScale = activeScale;
+        // Exact RyomenX mobile scaling & layout (ui_scale clamped 0.7f - 1.2f)
+        const float ui_scale = 0.90f * clamp_val(cfg.menuScale, 0.7f, 1.2f);
+        io.FontGlobalScale = 1.0f;
 
         const float u = ImGui::GetFontSize();
 
         ImGui::GetStyle().Alpha = clamp_val(cfg.menuOpacity, 0.5f, 1.0f);
 
-        // Optimal mobile landscape proportions: fills ~75-90% of screen
-        const float targetW = clamp_val(io.DisplaySize.x * 0.78f, 480.0f, io.DisplaySize.x * 0.92f);
-        const float targetH = clamp_val(io.DisplaySize.y * 0.88f, 300.0f, io.DisplaySize.y * 0.94f);
+        // Exact RyomenX dimensions: 540x400 scaled by ui_scale, bounded by screen bounds
+        const float targetW = std::min(540.0f * ui_scale, io.DisplaySize.x - 24.0f);
+        const float targetH = std::min(400.0f * ui_scale, io.DisplaySize.y - 20.0f);
         const ImVec2 size(targetW, targetH);
 
         static bool s_has_centered = false;
         static float s_last_w = 0.0f;
         static float s_last_h = 0.0f;
-        static float s_last_scale = 1.0f;
 
         bool display_changed = (std::abs(io.DisplaySize.x - s_last_w) > 40.0f ||
                                 std::abs(io.DisplaySize.y - s_last_h) > 40.0f);
@@ -618,25 +617,15 @@ namespace Menu
             s_has_centered = false; // Re-center on resolution/orientation change
         }
 
-        bool scale_changed = (std::abs(cfg.menuScale - s_last_scale) > 0.03f);
-        if (scale_changed) {
-            s_last_scale = cfg.menuScale;
-            ApplyWhiteTheme(activeScale, ImVec4(cfg.accent[0], cfg.accent[1], cfg.accent[2], 1.0f));
-        }
-
-        // Center on initial valid landscape frame or orientation/scale change or manual recenter
-        if ((!s_has_centered || s_force_recenter) &&
-            io.DisplaySize.x > io.DisplaySize.y && io.DisplaySize.x > 400.0f) {
-            ImGui::SetNextWindowPos(ImVec2((io.DisplaySize.x - targetW) * 0.5f,
-                                           (io.DisplaySize.y - targetH) * 0.5f),
-                                    ImGuiCond_Always);
+        // Center dynamically with 0.5 pivot (exact RyomenX center behavior)
+        if (!s_has_centered || s_force_recenter) {
+            ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f),
+                                    ImGuiCond_Always, ImVec2(0.5f, 0.5f));
             ImGui::SetNextWindowSize(size, ImGuiCond_Always);
             s_has_centered = true;
             s_force_recenter = false;
-        } else if (scale_changed) {
-            ImGui::SetNextWindowSize(size, ImGuiCond_Always);
         } else {
-            ImGui::SetNextWindowSize(size, ImGuiCond_FirstUseEver);
+            ImGui::SetNextWindowSize(size, ImGuiCond_Once);
         }
 
         const ImGuiWindowFlags wf = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse |

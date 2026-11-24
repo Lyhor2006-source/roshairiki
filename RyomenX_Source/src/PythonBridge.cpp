@@ -15,26 +15,36 @@
 
 #if defined(__APPLE__)
 #include <dlfcn.h>
+#include <mach-o/dyld.h>
 #endif
 
 namespace RyomenX {
+
+// Verified RoS 1.610637.617289 arm64 embedded Python offsets from RyomenX binary analysis
+// In the client binary (base 0x100000000):
+static const uintptr_t ROS_OFF_PY_ISINITIALIZED  = 0x1d05a24;
+static const uintptr_t ROS_OFF_PYGILSTATE_ENSURE = 0x1d05158;
+static const uintptr_t ROS_OFF_PYGILSTATE_RELEASE= 0x1d051dc;
+static const uintptr_t ROS_OFF_PYIMPORT_ADDMODULE= 0x1cf8fd4;
+static const uintptr_t ROS_OFF_PYMODULE_GETDICT  = 0x1c79884;
+static const uintptr_t ROS_OFF_PYRUN_STRINGFLAGS = 0x1d0689c;
+static const uintptr_t ROS_OFF_PYERR_CLEAR       = 0x1cf17f0;
 
 bool PythonBridge::Initialize(const std::string& cache_dir) {
     m_cache_dir = cache_dir;
 
     // Retry symbol resolution with backoff: Python may not be loaded yet at inject time
     bool symbols_ok = false;
-    for (int attempt = 0; attempt < 10; ++attempt) {
+    for (int attempt = 0; attempt < 12; ++attempt) {
         if (ResolvePythonSymbols()) {
             symbols_ok = true;
             break;
         }
-        std::this_thread::sleep_for(std::chrono::seconds(2));
+        std::this_thread::sleep_for(std::chrono::milliseconds(1500));
     }
 
     if (!symbols_ok) {
         std::cerr << "[PythonBridge] Failed to resolve Python runtime symbols after retries\n";
-        // Mark initialized anyway so ESP file reading still works as a fallback
         m_initialized = true;
         return false;
     }
@@ -42,11 +52,11 @@ bool PythonBridge::Initialize(const std::string& cache_dir) {
     m_initialized = true;
 
     // Wait until Python is actually initialized by the game engine
-    for (int attempt = 0; attempt < 15; ++attempt) {
+    for (int attempt = 0; attempt < 20; ++attempt) {
         if (p_Py_IsInitialized && p_Py_IsInitialized()) {
             break;
         }
-        std::this_thread::sleep_for(std::chrono::seconds(2));
+        std::this_thread::sleep_for(std::chrono::milliseconds(1500));
     }
 
     // Load payload script: try cache dir file first, then embedded payload
@@ -77,7 +87,21 @@ bool PythonBridge::Initialize(const std::string& cache_dir) {
 
 bool PythonBridge::ResolvePythonSymbols() {
 #if defined(__APPLE__)
-    // Try multiple handles: main executable, then known NeoX Python dylib names
+    // 1. Try dlsym(RTLD_DEFAULT, ...) across all loaded modules
+    p_Py_IsInitialized = reinterpret_cast<Py_IsInitialized_t>(dlsym(RTLD_DEFAULT, "Py_IsInitialized"));
+    p_PyGILState_Ensure = reinterpret_cast<PyGILState_Ensure_t>(dlsym(RTLD_DEFAULT, "PyGILState_Ensure"));
+    p_PyGILState_Release = reinterpret_cast<PyGILState_Release_t>(dlsym(RTLD_DEFAULT, "PyGILState_Release"));
+    p_PyImport_AddModule = reinterpret_cast<PyImport_AddModule_t>(dlsym(RTLD_DEFAULT, "PyImport_AddModule"));
+    p_PyModule_GetDict = reinterpret_cast<PyModule_GetDict_t>(dlsym(RTLD_DEFAULT, "PyModule_GetDict"));
+    p_PyRun_StringFlags = reinterpret_cast<PyRun_StringFlags_t>(dlsym(RTLD_DEFAULT, "PyRun_StringFlags"));
+    p_PyErr_Clear = reinterpret_cast<PyErr_Clear_t>(dlsym(RTLD_DEFAULT, "PyErr_Clear"));
+
+    if (p_Py_IsInitialized && p_PyGILState_Ensure && p_PyGILState_Release &&
+        p_PyImport_AddModule && p_PyModule_GetDict && p_PyRun_StringFlags) {
+        return true;
+    }
+
+    // 2. Try multiple handles: main executable, then known NeoX Python dylib names
     void* handles[] = {
         dlopen(NULL, RTLD_NOW),
         dlopen("@rpath/libpython2.7.dylib", RTLD_NOW | RTLD_NOLOAD),
@@ -90,20 +114,31 @@ bool PythonBridge::ResolvePythonSymbols() {
     for (void* handle : handles) {
         if (!handle) continue;
 
-        p_Py_IsInitialized = reinterpret_cast<Py_IsInitialized_t>(dlsym(handle, "Py_IsInitialized"));
-        if (!p_Py_IsInitialized) continue;
-
-        p_PyGILState_Ensure = reinterpret_cast<PyGILState_Ensure_t>(dlsym(handle, "PyGILState_Ensure"));
-        p_PyGILState_Release = reinterpret_cast<PyGILState_Release_t>(dlsym(handle, "PyGILState_Release"));
-        p_PyImport_AddModule = reinterpret_cast<PyImport_AddModule_t>(dlsym(handle, "PyImport_AddModule"));
-        p_PyModule_GetDict = reinterpret_cast<PyModule_GetDict_t>(dlsym(handle, "PyModule_GetDict"));
-        p_PyRun_StringFlags = reinterpret_cast<PyRun_StringFlags_t>(dlsym(handle, "PyRun_StringFlags"));
-        p_PyErr_Clear = reinterpret_cast<PyErr_Clear_t>(dlsym(handle, "PyErr_Clear"));
+        if (!p_Py_IsInitialized) p_Py_IsInitialized = reinterpret_cast<Py_IsInitialized_t>(dlsym(handle, "Py_IsInitialized"));
+        if (!p_PyGILState_Ensure) p_PyGILState_Ensure = reinterpret_cast<PyGILState_Ensure_t>(dlsym(handle, "PyGILState_Ensure"));
+        if (!p_PyGILState_Release) p_PyGILState_Release = reinterpret_cast<PyGILState_Release_t>(dlsym(handle, "PyGILState_Release"));
+        if (!p_PyImport_AddModule) p_PyImport_AddModule = reinterpret_cast<PyImport_AddModule_t>(dlsym(handle, "PyImport_AddModule"));
+        if (!p_PyModule_GetDict) p_PyModule_GetDict = reinterpret_cast<PyModule_GetDict_t>(dlsym(handle, "PyModule_GetDict"));
+        if (!p_PyRun_StringFlags) p_PyRun_StringFlags = reinterpret_cast<PyRun_StringFlags_t>(dlsym(handle, "PyRun_StringFlags"));
+        if (!p_PyErr_Clear) p_PyErr_Clear = reinterpret_cast<PyErr_Clear_t>(dlsym(handle, "PyErr_Clear"));
 
         if (p_Py_IsInitialized && p_PyGILState_Ensure && p_PyGILState_Release &&
             p_PyImport_AddModule && p_PyModule_GetDict && p_PyRun_StringFlags) {
             return true;
         }
+    }
+
+    // 3. Fallback: If stripped, resolve directly via RoS client Mach-O ASLR slide (RyomenX original mechanism)
+    intptr_t slide = _dyld_get_image_vmaddr_slide(0);
+    if (slide != 0 || _dyld_get_image_header(0) != nullptr) {
+        p_Py_IsInitialized = reinterpret_cast<Py_IsInitialized_t>(slide + ROS_OFF_PY_ISINITIALIZED);
+        p_PyGILState_Ensure = reinterpret_cast<PyGILState_Ensure_t>(slide + ROS_OFF_PYGILSTATE_ENSURE);
+        p_PyGILState_Release = reinterpret_cast<PyGILState_Release_t>(slide + ROS_OFF_PYGILSTATE_RELEASE);
+        p_PyImport_AddModule = reinterpret_cast<PyImport_AddModule_t>(slide + ROS_OFF_PYIMPORT_ADDMODULE);
+        p_PyModule_GetDict = reinterpret_cast<PyModule_GetDict_t>(slide + ROS_OFF_PYMODULE_GETDICT);
+        p_PyRun_StringFlags = reinterpret_cast<PyRun_StringFlags_t>(slide + ROS_OFF_PYRUN_STRINGFLAGS);
+        p_PyErr_Clear = reinterpret_cast<PyErr_Clear_t>(slide + ROS_OFF_PYERR_CLEAR);
+        return true;
     }
 
     return false;
@@ -120,19 +155,33 @@ bool PythonBridge::ExecutePayload(const std::string& python_code) {
         return false;
     }
 
-    void* gstate = p_PyGILState_Ensure();
-    void* main_module = p_PyImport_AddModule("__main__");
-    void* global_dict = p_PyModule_GetDict(main_module);
+    void* gstate = p_PyGILState_Ensure ? p_PyGILState_Ensure() : nullptr;
+    void* main_module = p_PyImport_AddModule ? p_PyImport_AddModule("__main__") : nullptr;
+    void* global_dict = (main_module && p_PyModule_GetDict) ? p_PyModule_GetDict(main_module) : nullptr;
 
-    std::string setup_script = "_RYOMENX_DIR = '" + m_cache_dir + "'\n" + python_code;
+    if (!global_dict || !p_PyRun_StringFlags) {
+        if (gstate && p_PyGILState_Release) p_PyGILState_Release(gstate);
+        return false;
+    }
 
-    // Py_file_input = 257
-    void* result = p_PyRun_StringFlags(setup_script.c_str(), 257, global_dict, global_dict, nullptr);
+    // Wrap payload identical to RyomenX production wrapper with traceback capture
+    std::string wrapped = "_RYOMENX_DIR = '" + m_cache_dir + "'\n"
+                          "import traceback\n"
+                          "try:\n"
+                          + python_code + "\n"
+                          "except Exception:\n"
+                          "    open(_RYOMENX_DIR + '/payload-error.txt', 'w').write(traceback.format_exc())\n"
+                          "    raise\n";
+
+    // Py_file_input = 257 (0x101)
+    void* result = p_PyRun_StringFlags(wrapped.c_str(), 257, global_dict, global_dict, nullptr);
     if (!result && p_PyErr_Clear) {
         p_PyErr_Clear();
     }
 
-    p_PyGILState_Release(gstate);
+    if (gstate && p_PyGILState_Release) {
+        p_PyGILState_Release(gstate);
+    }
     m_payload_active = (result != nullptr);
     return m_payload_active;
 #else
