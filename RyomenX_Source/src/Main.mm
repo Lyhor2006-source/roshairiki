@@ -98,7 +98,8 @@ static void RyomenX_Init() {
 
         // 4. Spawn Python Bridge Worker safely outside dyld lock
         std::thread([cache_dir_std]() {
-            std::this_thread::sleep_for(std::chrono::seconds(2));
+            // Wait for game engine + Python runtime to fully initialize
+            std::this_thread::sleep_for(std::chrono::seconds(5));
             RyomenX::PythonBridge::Get().Initialize(cache_dir_std);
         }).detach();
 

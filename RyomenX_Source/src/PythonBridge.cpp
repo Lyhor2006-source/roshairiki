@@ -6,6 +6,13 @@
 #include <thread>
 #include <chrono>
 
+#if __has_include("EmbeddedPayload.hpp")
+#include "EmbeddedPayload.hpp"
+#define HAS_EMBEDDED_PAYLOAD 1
+#else
+#define HAS_EMBEDDED_PAYLOAD 0
+#endif
+
 #if defined(__APPLE__)
 #include <dlfcn.h>
 #endif
@@ -15,20 +22,54 @@ namespace RyomenX {
 bool PythonBridge::Initialize(const std::string& cache_dir) {
     m_cache_dir = cache_dir;
 
-    if (!ResolvePythonSymbols()) {
-        std::cerr << "[PythonBridge] Failed to resolve Python runtime symbols\n";
+    // Retry symbol resolution with backoff: Python may not be loaded yet at inject time
+    bool symbols_ok = false;
+    for (int attempt = 0; attempt < 10; ++attempt) {
+        if (ResolvePythonSymbols()) {
+            symbols_ok = true;
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::seconds(2));
+    }
+
+    if (!symbols_ok) {
+        std::cerr << "[PythonBridge] Failed to resolve Python runtime symbols after retries\n";
+        // Mark initialized anyway so ESP file reading still works as a fallback
+        m_initialized = true;
         return false;
     }
 
     m_initialized = true;
 
-    // Load payload script from bundled file or default location
+    // Wait until Python is actually initialized by the game engine
+    for (int attempt = 0; attempt < 15; ++attempt) {
+        if (p_Py_IsInitialized && p_Py_IsInitialized()) {
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::seconds(2));
+    }
+
+    // Load payload script: try cache dir file first, then embedded payload
+    std::string payload_code;
     std::string script_path = m_cache_dir + "/neox_battle_payload.py";
     std::ifstream file(script_path);
     if (file.is_open()) {
         std::stringstream buffer;
         buffer << file.rdbuf();
-        ExecutePayload(buffer.str());
+        payload_code = buffer.str();
+    }
+#if HAS_EMBEDDED_PAYLOAD
+    if (payload_code.empty()) {
+        payload_code = RyomenX::EMBEDDED_PAYLOAD;
+        // Also write to disk so future runs can find it
+        std::ofstream out(script_path);
+        if (out.is_open()) {
+            out << payload_code;
+        }
+    }
+#endif
+    if (!payload_code.empty()) {
+        ExecutePayload(payload_code);
     }
 
     return true;
@@ -36,19 +77,36 @@ bool PythonBridge::Initialize(const std::string& cache_dir) {
 
 bool PythonBridge::ResolvePythonSymbols() {
 #if defined(__APPLE__)
-    void* handle = dlopen(NULL, RTLD_NOW);
-    if (!handle) return false;
+    // Try multiple handles: main executable, then known NeoX Python dylib names
+    void* handles[] = {
+        dlopen(NULL, RTLD_NOW),
+        dlopen("@rpath/libpython2.7.dylib", RTLD_NOW | RTLD_NOLOAD),
+        dlopen("@rpath/Python.framework/Python", RTLD_NOW | RTLD_NOLOAD),
+        dlopen("libpython2.7.dylib", RTLD_NOW | RTLD_NOLOAD),
+        dlopen("Python", RTLD_NOW | RTLD_NOLOAD),
+        dlopen(NULL, RTLD_LAZY)
+    };
 
-    p_Py_IsInitialized = reinterpret_cast<Py_IsInitialized_t>(dlsym(handle, "Py_IsInitialized"));
-    p_PyGILState_Ensure = reinterpret_cast<PyGILState_Ensure_t>(dlsym(handle, "PyGILState_Ensure"));
-    p_PyGILState_Release = reinterpret_cast<PyGILState_Release_t>(dlsym(handle, "PyGILState_Release"));
-    p_PyImport_AddModule = reinterpret_cast<PyImport_AddModule_t>(dlsym(handle, "PyImport_AddModule"));
-    p_PyModule_GetDict = reinterpret_cast<PyModule_GetDict_t>(dlsym(handle, "PyModule_GetDict"));
-    p_PyRun_StringFlags = reinterpret_cast<PyRun_StringFlags_t>(dlsym(handle, "PyRun_StringFlags"));
-    p_PyErr_Clear = reinterpret_cast<PyErr_Clear_t>(dlsym(handle, "PyErr_Clear"));
+    for (void* handle : handles) {
+        if (!handle) continue;
 
-    return (p_Py_IsInitialized && p_PyGILState_Ensure && p_PyGILState_Release &&
-            p_PyImport_AddModule && p_PyModule_GetDict && p_PyRun_StringFlags);
+        p_Py_IsInitialized = reinterpret_cast<Py_IsInitialized_t>(dlsym(handle, "Py_IsInitialized"));
+        if (!p_Py_IsInitialized) continue;
+
+        p_PyGILState_Ensure = reinterpret_cast<PyGILState_Ensure_t>(dlsym(handle, "PyGILState_Ensure"));
+        p_PyGILState_Release = reinterpret_cast<PyGILState_Release_t>(dlsym(handle, "PyGILState_Release"));
+        p_PyImport_AddModule = reinterpret_cast<PyImport_AddModule_t>(dlsym(handle, "PyImport_AddModule"));
+        p_PyModule_GetDict = reinterpret_cast<PyModule_GetDict_t>(dlsym(handle, "PyModule_GetDict"));
+        p_PyRun_StringFlags = reinterpret_cast<PyRun_StringFlags_t>(dlsym(handle, "PyRun_StringFlags"));
+        p_PyErr_Clear = reinterpret_cast<PyErr_Clear_t>(dlsym(handle, "PyErr_Clear"));
+
+        if (p_Py_IsInitialized && p_PyGILState_Ensure && p_PyGILState_Release &&
+            p_PyImport_AddModule && p_PyModule_GetDict && p_PyRun_StringFlags) {
+            return true;
+        }
+    }
+
+    return false;
 #else
     return true;
 #endif

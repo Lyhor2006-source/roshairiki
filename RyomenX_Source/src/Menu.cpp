@@ -352,13 +352,13 @@ namespace Menu
         s.ScaleAllSizes(scale);
 
         ImVec4* c = s.Colors;
-        c[ImGuiCol_Text]                 = ImVec4(0.10f, 0.11f, 0.14f, 1.00f);
-        c[ImGuiCol_TextDisabled]         = ImVec4(0.55f, 0.57f, 0.62f, 1.00f);
-        c[ImGuiCol_WindowBg]             = ImVec4(0.965f, 0.970f, 0.980f, 1.00f);
+        c[ImGuiCol_Text]                 = ImVec4(0.08f, 0.09f, 0.12f, 1.00f);
+        c[ImGuiCol_TextDisabled]         = ImVec4(0.48f, 0.50f, 0.56f, 1.00f);
+        c[ImGuiCol_WindowBg]             = ImVec4(1.00f, 1.00f, 1.00f, 0.96f);
         c[ImGuiCol_ChildBg]              = ImVec4(0, 0, 0, 0);
-        c[ImGuiCol_PopupBg]              = Gray(1.0f);
-        c[ImGuiCol_Border]               = ImVec4(0.87f, 0.88f, 0.91f, 1.00f);
-        c[ImGuiCol_BorderShadow]         = ImVec4(0, 0, 0, 0);
+        c[ImGuiCol_PopupBg]              = ImVec4(1.0f, 1.0f, 1.0f, 0.98f);
+        c[ImGuiCol_Border]               = ImVec4(0.85f, 0.86f, 0.90f, 1.00f);
+        c[ImGuiCol_BorderShadow]         = ImVec4(0, 0, 0, 0.04f);
         c[ImGuiCol_FrameBg]              = ImVec4(0.925f, 0.935f, 0.955f, 1.00f);
         c[ImGuiCol_FrameBgHovered]       = ImVec4(0.890f, 0.905f, 0.935f, 1.00f);
         c[ImGuiCol_FrameBgActive]        = ImVec4(0.850f, 0.870f, 0.920f, 1.00f);
@@ -600,9 +600,9 @@ namespace Menu
 
         ImGui::GetStyle().Alpha = clamp_val(cfg.menuOpacity, 0.5f, 1.0f);
 
-        // Optimal mobile landscape proportions (fills ~72-88% of screen)
-        const float targetW = std::min(io.DisplaySize.x * 0.90f, std::max(560.0f * (activeScale / 1.35f), io.DisplaySize.x * 0.72f));
-        const float targetH = std::min(io.DisplaySize.y * 0.92f, std::max(340.0f * (activeScale / 1.35f), io.DisplaySize.y * 0.86f));
+        // Optimal mobile landscape proportions: fills ~75-90% of screen
+        const float targetW = clamp_val(io.DisplaySize.x * 0.78f, 480.0f, io.DisplaySize.x * 0.92f);
+        const float targetH = clamp_val(io.DisplaySize.y * 0.88f, 300.0f, io.DisplaySize.y * 0.94f);
         const ImVec2 size(targetW, targetH);
 
         static bool s_has_centered = false;
@@ -649,6 +649,16 @@ namespace Menu
         {
             g_window_pos  = ImGui::GetWindowPos();
             g_window_size = ImGui::GetWindowSize();
+
+            // Drop shadow behind window
+            {
+                ImDrawList* bg = ImGui::GetBackgroundDrawList();
+                const float sh = 8.0f * g_scale;
+                bg->AddRectFilled(
+                    ImVec2(g_window_pos.x + sh * 0.5f, g_window_pos.y + sh),
+                    ImVec2(g_window_pos.x + g_window_size.x + sh * 0.3f, g_window_pos.y + g_window_size.y + sh * 0.6f),
+                    IM_COL32(0, 0, 0, 30), ImGui::GetStyle().WindowRounding);
+            }
 
             // Header (drag here to move the window)
             ImGui::AlignTextToFramePadding();
@@ -699,7 +709,7 @@ namespace Menu
 
             // Sidebar
             const float sideW = u * 10.5f;
-            ImGui::PushStyleColor(ImGuiCol_ChildBg, Gray(1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.96f, 0.97f, 0.98f, 1.0f));
             ImGui::BeginChild("##side", ImVec2(sideW, 0), false, ImGuiWindowFlags_NoScrollbar);
             {
                 const float pad = u * 0.6f;
@@ -769,10 +779,10 @@ namespace Menu
         g_hud_size = ImVec2(b.x - a.x, b.y - a.y);
 
         ImDrawList* dl = ImGui::GetForegroundDrawList();
-        dl->AddRectFilled(a, b, IM_COL32(255, 255, 255, 240), (b.y - a.y) * 0.5f);
-        dl->AddRect(a, b, IM_COL32(0, 0, 0, 24), (b.y - a.y) * 0.5f);
+        dl->AddRectFilled(a, b, IM_COL32(255, 255, 255, 250), (b.y - a.y) * 0.5f);
+        dl->AddRect(a, b, IM_COL32(0, 0, 0, 40), (b.y - a.y) * 0.5f, 0, 1.0f);
         dl->AddCircleFilled(ImVec2(a.x + u * 0.7f, (a.y + b.y) * 0.5f), u * 0.22f, Col(g_accent), 16);
-        dl->AddText(ImVec2(a.x + u * 1.2f, a.y + u * 0.4f), IM_COL32(25, 28, 36, 255), buf);
+        dl->AddText(ImVec2(a.x + u * 1.2f, a.y + u * 0.4f), IM_COL32(20, 22, 30, 255), buf);
 
         // Click / touch HUD pill to toggle menu open
         if (open && ImGui::IsMouseClicked(0)) {

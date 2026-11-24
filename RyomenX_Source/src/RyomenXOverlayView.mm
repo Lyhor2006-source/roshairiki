@@ -179,8 +179,12 @@ static bool s_menu_open = true;
 #pragma mark - MTKViewDelegate
 
 - (void)mtkView:(MTKView*)view drawableSizeWillChange:(CGSize)size {
+    // size is in PIXELS (drawable), not points.  DisplaySize must be in points.
+    CGFloat scale = self.contentScaleFactor;
+    if (scale < 1.0f) scale = [UIScreen mainScreen].scale;
+    if (scale < 1.0f) scale = 2.0f;
     ImGuiIO& io = ImGui::GetIO();
-    io.DisplaySize = ImVec2(size.width, size.height);
+    io.DisplaySize = ImVec2(size.width / scale, size.height / scale);
 }
 
 - (void)drawInMTKView:(MTKView*)view {

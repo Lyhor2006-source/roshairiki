@@ -43,6 +43,24 @@ jobs:
           if [ -d "RyomenX_Source" ]; then
             cd RyomenX_Source
           fi
+
+          # Generate embedded Python payload header from script
+          echo "[*] Embedding neox_battle_payload.py into C header..."
+          python3 -c "
+import sys
+with open('scripts/neox_battle_payload.py', 'r') as f:
+    data = f.read()
+with open('include/EmbeddedPayload.hpp', 'w') as out:
+    out.write('#pragma once\n')
+    out.write('#include <string>\n\n')
+    out.write('namespace RyomenX {\n')
+    out.write('static const std::string EMBEDDED_PAYLOAD = R\"PYEOF(\n')
+    out.write(data)
+    out.write('\n)PYEOF\";\n')
+    out.write('} // namespace RyomenX\n')
+print(f'[+] Embedded {len(data)} bytes of Python payload')
+          "
+
           echo "[*] Compiling RyomenX.dylib with Theos (iOS arm64)..."
           make clean || true
           set -o pipefail
