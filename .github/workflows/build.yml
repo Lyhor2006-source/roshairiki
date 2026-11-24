@@ -43,6 +43,9 @@ jobs:
           if [ -d "RyomenX_Source" ]; then
             cd RyomenX_Source
           fi
+          echo "[*] Embedding Python payload into EmbeddedPayload.hpp..."
+          python3 scripts/embed_payload.py
+
           echo "[*] Compiling RyomenX.dylib with Theos (iOS arm64)..."
           make clean || true
           set -o pipefail

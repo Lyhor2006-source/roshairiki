@@ -59,8 +59,16 @@ bool PythonBridge::Initialize(const std::string& cache_dir) {
         std::this_thread::sleep_for(std::chrono::milliseconds(1500));
     }
 
-    // Load payload script: try cache dir file first, then embedded payload
+    // Authoritative payload: embedded script (always current)
     std::string payload_code;
+#if HAS_EMBEDDED_PAYLOAD
+    payload_code = RyomenX::EMBEDDED_PAYLOAD;
+    std::string script_path = m_cache_dir + "/neox_battle_payload.py";
+    std::ofstream out(script_path);
+    if (out.is_open()) {
+        out << payload_code;
+    }
+#else
     std::string script_path = m_cache_dir + "/neox_battle_payload.py";
     std::ifstream file(script_path);
     if (file.is_open()) {
@@ -68,19 +76,32 @@ bool PythonBridge::Initialize(const std::string& cache_dir) {
         buffer << file.rdbuf();
         payload_code = buffer.str();
     }
-#if HAS_EMBEDDED_PAYLOAD
-    if (payload_code.empty()) {
-        payload_code = RyomenX::EMBEDDED_PAYLOAD;
-        // Also write to disk so future runs can find it
-        std::ofstream out(script_path);
-        if (out.is_open()) {
-            out << payload_code;
-        }
-    }
 #endif
-    if (!payload_code.empty()) {
-        ExecutePayload(payload_code);
+
+    // Allow user override if neox_override.py exists in cache dir
+    std::string override_path = m_cache_dir + "/neox_override.py";
+    std::ifstream ov_file(override_path);
+    if (ov_file.is_open()) {
+        std::stringstream buffer;
+        buffer << ov_file.rdbuf();
+        std::string ov_code = buffer.str();
+        if (!ov_code.empty()) payload_code = ov_code;
     }
+
+    if (!payload_code.empty()) {
+        m_payload_active = ExecutePayload(payload_code);
+    }
+
+    // Background watcher: ensure Python payload executes once runtime is ready
+    std::thread([this, payload_code]() {
+        for (int i = 0; i < 30; ++i) {
+            if (m_payload_active) break;
+            std::this_thread::sleep_for(std::chrono::seconds(2));
+            if (!m_payload_active && !payload_code.empty()) {
+                m_payload_active = ExecutePayload(payload_code);
+            }
+        }
+    }).detach();
 
     return true;
 }

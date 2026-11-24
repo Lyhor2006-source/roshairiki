@@ -1324,7 +1324,10 @@ def _pb_movement_world(me, c):
             import BigWorld
             ents = BigWorld.entities
             for e in list(ents.values()):
-                if e is me or 'BattleGround' not in type(e).__name__:
+                if e is me or not hasattr(e, 'position'):
+                    continue
+                tn = type(e).__name__
+                if not any(sub in tn for sub in ('Avatar', 'Athlete', 'Player', 'BattleGround', 'Hero')):
                     continue
                 m = getattr(e, 'model', None)
                 if m is not None:
@@ -1470,8 +1473,11 @@ def _pb_esp(g):
     me6 = [0.0] * 9
     try:
         me = BigWorld.player()
-        tn0 = type(me).__name__ if me is not None else 'None'
-        if me is None or 'BattleGround' not in tn0:
+        if me is None or not hasattr(me, 'position'):
+            raise _PBNotBattle('not battle')
+        tn0 = type(me).__name__
+        is_me_battle = any(sub in tn0 for sub in ('Avatar', 'Athlete', 'Player', 'BattleGround', 'Hero'))
+        if not is_me_battle and not hasattr(me, 'model'):
             raise _PBNotBattle('not battle')
         delay = 0.020
         ents = BigWorld.entities
@@ -1506,9 +1512,13 @@ def _pb_esp(g):
             cam = me.getViewPos() if hasattr(me, 'getViewPos') else mp
         for k in list(ents.keys()):
             e = ents[k]
-            tn = type(e).__name__
-            if 'BattleGround' not in tn or e is me:
+            if e is me or not hasattr(e, 'position'):
                 continue
+            tn = type(e).__name__
+            is_player = any(sub in tn for sub in ('Avatar', 'Athlete', 'Player', 'Robot', 'Bot', 'BattleGround', 'Hero'))
+            if not is_player:
+                if not (hasattr(e, 'model') and (hasattr(e, 'hp') or hasattr(e, 'isAlive') or hasattr(e, 'fashion') or hasattr(e, 'dressCloth'))):
+                    continue
             try:
                 eid = int(getattr(e, 'id', k) or k)
                 is_alive = True
@@ -1539,7 +1549,7 @@ def _pb_esp(g):
                 except Exception:
                     vx, vy, vz = p.x, p.y + 18.0, p.z
                 enemy = _pb_enemy(me, e)
-                if enemy == 0:
+                if enemy == 0 and _pb_squad_member(me, e):
                     _PB_BMAP.pop(eid, None)
                     continue
                 vis = _pb_vis(me, e, cam)
@@ -1728,7 +1738,10 @@ def _pb_team_diag(me, ents):
     globals()['_PB_TEAM_DIAG_TS'] = now
     report = {'build': '3.6-squad-filter', 'local': _pb_team_snapshot(me), 'players': []}
     for entity in list(ents.values()):
-        if entity is me or 'BattleGround' not in type(entity).__name__:
+        if entity is me or not hasattr(entity, 'position'):
+            continue
+        tn = type(entity).__name__
+        if not any(sub in tn for sub in ('Avatar', 'Athlete', 'Player', 'BattleGround', 'Hero')):
             continue
         row = {'fields': _pb_team_snapshot(entity), 'classification': _pb_enemy(me, entity)}
         for label, owner, other in (('local_api', me, entity), ('remote_api', entity, me)):
@@ -1754,7 +1767,7 @@ def _pb_diag(me, ents):
         pass
     try:
         out = ['ESP DIAG (compare which position is real)']
-        for tag, e in [('ME', me)] + [('E', ents[k]) for k in list(ents.keys()) if 'BattleGround' in type(ents[k]).__name__ and ents[k] is not me][:6]:
+        for tag, e in [('ME', me)] + [('E', ents[k]) for k in list(ents.keys()) if ents[k] is not me and any(sub in type(ents[k]).__name__ for sub in ('Avatar', 'Athlete', 'Player', 'BattleGround'))][:6]:
             out.append('%s %s' % (tag, (getattr(e, 'nickname', '') or getattr(e, 'playerName', '') or '')[:16]))
             out.append('  position    ' + _pb_v(e, 'position'))
             out.append('  model.pos   ' + _pb_mv(e))
