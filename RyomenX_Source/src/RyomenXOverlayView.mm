@@ -14,10 +14,11 @@ void ImGui_ImplMetal_RenderDrawData(ImDrawData* draw_data, id<MTLCommandBuffer> 
 
 static bool s_menu_open = true;
 
-@interface RyomenXOverlayView : MTKView <MTKViewDelegate>
+@interface RyomenXOverlayView : MTKView <MTKViewDelegate, UIGestureRecognizerDelegate>
 @property (nonatomic, strong) id<MTLCommandQueue> command_queue;
 @property (nonatomic, assign) UITouch* primary_touch;
 @property (nonatomic, assign) double last_frame_time;
+- (void)attachThreeFingerTapToWindow:(UIWindow*)window;
 @end
 
 @implementation RyomenXOverlayView
@@ -44,15 +45,67 @@ static bool s_menu_open = true;
         io.DisplaySize = ImVec2(frame.size.width, frame.size.height);
         io.IniFilename = nullptr; // Stateless configuration
 
-        // Setup Eclipse White Modern Theme
-        Menu::ApplyWhiteTheme(1.0f, ImVec4(0.20f, 0.45f, 1.00f, 1.0f));
+        // Touch-friendly scaling for mobile retina display
+        io.FontGlobalScale = 1.35f;
+
+        // Setup Eclipse White Modern Theme scaled for mobile touch
+        Menu::ApplyWhiteTheme(1.35f, ImVec4(0.20f, 0.45f, 1.00f, 1.0f));
 
         ImGui_ImplMetal_Init(device);
 
         // Load saved preferences
         RyomenX::Settings::Get().LoadFromPreferences();
+
+        // 3-Finger Tap Gesture on overlay view
+        UITapGestureRecognizer* selfTap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(handleThreeFingerTap:)];
+        selfTap.numberOfTouchesRequired = 3;
+        selfTap.numberOfTapsRequired = 1;
+        selfTap.cancelsTouchesInView = NO;
+        selfTap.delaysTouchesBegan = NO;
+        selfTap.delaysTouchesEnded = NO;
+        selfTap.delegate = self;
+        [self addGestureRecognizer:selfTap];
     }
     return self;
+}
+
+- (void)didMoveToWindow {
+    [super didMoveToWindow];
+    if (self.window) {
+        [self attachThreeFingerTapToWindow:self.window];
+    }
+}
+
+// Attach 3-finger tap recognizer to root window so it opens even when overlay passes touches through
+- (void)attachThreeFingerTapToWindow:(UIWindow*)window {
+    if (!window) return;
+    for (UIGestureRecognizer* gr in window.gestureRecognizers) {
+        if ([gr isKindOfClass:[UITapGestureRecognizer class]]) {
+            UITapGestureRecognizer* tap = (UITapGestureRecognizer*)gr;
+            if (tap.numberOfTouchesRequired == 3) {
+                return; // Already attached
+            }
+        }
+    }
+    UITapGestureRecognizer* winTap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(handleThreeFingerTap:)];
+    winTap.numberOfTouchesRequired = 3;
+    winTap.numberOfTapsRequired = 1;
+    winTap.cancelsTouchesInView = NO;
+    winTap.delaysTouchesBegan = NO;
+    winTap.delaysTouchesEnded = NO;
+    winTap.delegate = self;
+    [window addGestureRecognizer:winTap];
+}
+
+- (void)handleThreeFingerTap:(UITapGestureRecognizer*)recognizer {
+    if (recognizer.state == UIGestureRecognizerStateEnded) {
+        s_menu_open = !s_menu_open;
+        RyomenX::Settings::Get().menu_open = s_menu_open;
+    }
+}
+
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)otherGestureRecognizer {
+    return YES;
 }
 
 // Touch Passthrough: Allows gameplay controls to receive touches outside of cheat menus
@@ -110,6 +163,9 @@ static bool s_menu_open = true;
     io.DeltaTime = self.last_frame_time > 0.0 ? (float)(current_time - self.last_frame_time) : (1.0f / 60.0f);
     self.last_frame_time = current_time;
 
+    // Sync state with global settings
+    s_menu_open = RyomenX::Settings::Get().menu_open;
+
     // Begin ImGui Metal Frame
     ImGui_ImplMetal_NewFrame(renderPassDesc);
     ImGui::NewFrame();
@@ -124,6 +180,9 @@ static bool s_menu_open = true;
 
     // 3. Render Eclipse 5-Tab Main Menu (Visuals, Aim, Memory, Misc, Settings)
     Menu::Render(&s_menu_open);
+
+    // Keep global settings in sync
+    RyomenX::Settings::Get().menu_open = s_menu_open;
 
     // End ImGui Frame & Render
     ImGui::Render();

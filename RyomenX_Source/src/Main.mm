@@ -9,6 +9,7 @@
 
 @interface RyomenXOverlayView : UIView
 - (instancetype)initWithFrame:(CGRect)frame device:(id<MTLDevice>)device;
+- (void)attachThreeFingerTapToWindow:(UIWindow*)window;
 @end
 
 static RyomenXOverlayView* g_overlay_view = nil;
@@ -57,6 +58,8 @@ static void AttachOverlayToWindow() {
             [key_window addSubview:g_overlay_view];
             [key_window bringSubviewToFront:g_overlay_view];
         }
+
+        [g_overlay_view attachThreeFingerTapToWindow:key_window];
     });
 }
 

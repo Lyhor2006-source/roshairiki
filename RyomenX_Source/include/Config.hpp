@@ -49,7 +49,7 @@ struct ColorRGBA {
 
 struct Settings {
     // Menu & State
-    bool menu_open = false;
+    bool menu_open = true;
     bool show_floating_bar = true;
     float menu_scale = 1.0f;
     float bar_pos_x = 100.0f;

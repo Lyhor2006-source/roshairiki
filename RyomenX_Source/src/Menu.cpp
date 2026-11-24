@@ -583,15 +583,49 @@ namespace Menu
         SyncToRyomenX();
 
         ImGuiIO& io = ImGui::GetIO();
+
+        // Responsive mobile DPI scaling: base 1.35x for retina handheld screens
+        const float activeScale = 1.35f * clamp_val(cfg.menuScale, 0.8f, 1.6f);
+        io.FontGlobalScale = activeScale;
+
         const float u = ImGui::GetFontSize();
 
         ImGui::GetStyle().Alpha = clamp_val(cfg.menuOpacity, 0.5f, 1.0f);
 
-        const ImVec2 size(std::min(io.DisplaySize.x * 0.94f, u * 56.0f * cfg.menuScale),
-                          std::min(io.DisplaySize.y * 0.88f, u * 34.0f * cfg.menuScale));
-        ImGui::SetNextWindowSize(size, ImGuiCond_FirstUseEver);
-        ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f),
-                                ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
+        // Optimal mobile landscape proportions (fills ~72-88% of screen)
+        const float targetW = std::min(io.DisplaySize.x * 0.90f, std::max(560.0f * (activeScale / 1.35f), io.DisplaySize.x * 0.72f));
+        const float targetH = std::min(io.DisplaySize.y * 0.92f, std::max(340.0f * (activeScale / 1.35f), io.DisplaySize.y * 0.86f));
+        const ImVec2 size(targetW, targetH);
+
+        static bool s_has_centered = false;
+        static float s_last_w = 0.0f;
+        static float s_last_h = 0.0f;
+        static float s_last_scale = 1.0f;
+
+        bool display_changed = (std::abs(io.DisplaySize.x - s_last_w) > 40.0f ||
+                                std::abs(io.DisplaySize.y - s_last_h) > 40.0f);
+        if (display_changed) {
+            s_last_w = io.DisplaySize.x;
+            s_last_h = io.DisplaySize.y;
+        }
+
+        bool scale_changed = (std::abs(cfg.menuScale - s_last_scale) > 0.03f);
+        if (scale_changed) {
+            s_last_scale = cfg.menuScale;
+            ApplyWhiteTheme(activeScale, ImVec4(cfg.accent[0], cfg.accent[1], cfg.accent[2], 1.0f));
+        }
+
+        // Center on initial valid landscape frame or orientation/scale change
+        if ((!s_has_centered || display_changed || scale_changed) &&
+            io.DisplaySize.x > io.DisplaySize.y && io.DisplaySize.x > 400.0f) {
+            ImGui::SetNextWindowPos(ImVec2((io.DisplaySize.x - targetW) * 0.5f,
+                                           (io.DisplaySize.y - targetH) * 0.5f),
+                                    ImGuiCond_Always);
+            ImGui::SetNextWindowSize(size, ImGuiCond_Always);
+            s_has_centered = true;
+        } else {
+            ImGui::SetNextWindowSize(size, ImGuiCond_FirstUseEver);
+        }
 
         const ImGuiWindowFlags wf = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse |
                                     ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse |
@@ -610,16 +644,46 @@ namespace Menu
             ImGui::TextUnformatted(kTitle);
             ImGui::PopStyleColor();
 
+            // Circular Touch-Friendly 'X' Close Button
             if (open)
             {
+                const float btnSize = std::max(30.0f, u * 1.6f);
+                const float padX = ImGui::GetStyle().WindowPadding.x;
+                const float padY = ImGui::GetStyle().WindowPadding.y;
+
                 ImGui::SameLine();
-                const float bw = u * 4.5f;
-                ImGui::SetCursorPosX(ImGui::GetWindowWidth() - bw - ImGui::GetStyle().WindowPadding.x);
-                if (ImGui::Button("Hide", ImVec2(bw, 0))) {
+                ImGui::SetCursorPosX(ImGui::GetWindowWidth() - btnSize - padX);
+                ImGui::SetCursorPosY(padY * 0.5f);
+
+                const ImVec2 p = ImGui::GetCursorScreenPos();
+                if (ImGui::InvisibleButton("##close_x_btn", ImVec2(btnSize, btnSize))) {
                     *open = false;
+                    RyomenX::Settings::Get().menu_open = false;
                 }
+
+                const bool hovered = ImGui::IsItemHovered();
+                const bool active  = ImGui::IsItemActive();
+                ImDrawList* dl = ImGui::GetWindowDrawList();
+
+                const float radius = btnSize * 0.5f;
+                const ImVec2 center(p.x + radius, p.y + radius);
+
+                // Circular background: red on hover/active, soft light gray on idle
+                ImU32 bgCol = active ? IM_COL32(235, 60, 60, 255) :
+                              (hovered ? IM_COL32(245, 90, 90, 230) : IM_COL32(235, 238, 245, 230));
+                dl->AddCircleFilled(center, radius, bgCol, 24);
+
+                // Anti-aliased mathematical 'X' cross lines
+                const float crossR = radius * 0.38f;
+                const float stroke = std::max(2.0f, 2.2f * g_scale);
+                ImU32 xCol = (hovered || active) ? IM_COL32(255, 255, 255, 255) : IM_COL32(85, 90, 105, 255);
+
+                dl->AddLine(ImVec2(center.x - crossR, center.y - crossR),
+                            ImVec2(center.x + crossR, center.y + crossR), xCol, stroke);
+                dl->AddLine(ImVec2(center.x + crossR, center.y - crossR),
+                            ImVec2(center.x - crossR, center.y + crossR), xCol, stroke);
             }
-            ImGui::Dummy(ImVec2(0, u * 0.1f));
+            ImGui::Dummy(ImVec2(0, u * 0.15f));
 
             // Sidebar
             const float sideW = u * 10.5f;
