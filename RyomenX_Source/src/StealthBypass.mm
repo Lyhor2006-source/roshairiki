@@ -41,7 +41,7 @@ static BOOL hooked_fileExistsAtPath(id self, SEL _cmd, NSString* path) {
             [path containsString:@"/bin/bash"] ||
             [path containsString:@"/usr/sbin/sshd"] ||
             [path containsString:@"/etc/apt"] ||
-            [path containsString:@"RyomenX"]) {
+            [path containsString:@"RyomenX.dylib"]) {
             return NO;
         }
     }

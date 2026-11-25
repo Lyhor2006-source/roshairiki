@@ -14,6 +14,8 @@ private:
     std::atomic<bool> m_payload_active{false};
     std::string m_cache_dir;
     std::mutex m_entity_mutex;
+    std::mutex m_status_mutex;
+    std::string m_runtime_stage = "Pending";
     std::vector<PlayerEntity> m_entities;
     OverlayMath::Vec3 m_local_pos;
     OverlayMath::Vec3 m_local_view_pos;
@@ -21,6 +23,17 @@ private:
     int m_entity_count = 0;
     int m_bot_count = 0;
     int m_player_count = 0;
+    int m_esp_mode = 0;
+    float m_display_w = 844.0f;
+    float m_display_h = 390.0f;
+    float m_scale_x = 2.0f;
+    float m_scale_y = 2.0f;
+    uint64_t m_last_ino = 0;
+    long m_last_mtime_sec = 0;
+    long m_last_mtime_nsec = 0;
+    long long m_last_cfg_sync_ms = 0;
+
+    void SetRuntimeStage(const std::string& stage);
 
     // Python 2.7 C-API dynamically resolved function pointers
     typedef int (*Py_IsInitialized_t)();
@@ -48,14 +61,16 @@ public:
     bool Initialize(const std::string& cache_dir);
     bool ResolvePythonSymbols();
     bool ExecutePayload(const std::string& python_code);
-    void UpdateFromEspFile();
-    void WriteConfigSync();
+    void UpdateFromEspFile(float display_w = 0.0f, float display_h = 0.0f, float scale_x = 0.0f, float scale_y = 0.0f);
+    void WriteConfigSync(float display_w = 0.0f, float display_h = 0.0f, float scale_x = 0.0f, float scale_y = 0.0f);
 
     // Data accessors for UI & Rendering
     std::vector<PlayerEntity> GetEntities();
     int GetEntityCount() const { return m_entity_count; }
     int GetPlayerCount() const { return m_player_count; }
     int GetBotCount() const { return m_bot_count; }
+    int GetEspMode() const { return m_esp_mode; }
+    std::string GetRuntimeStage();
     OverlayMath::Vec3 GetLocalPosition() const { return m_local_pos; }
     bool IsPayloadActive() const { return m_payload_active; }
 };

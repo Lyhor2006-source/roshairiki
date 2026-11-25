@@ -77,6 +77,9 @@ namespace Menu
     // scale = UI scale on top of the base sizes (1.0f default).
     void ApplyWhiteTheme(float scale, const ImVec4& accent);
 
+    // Synchronize Menu::Cfg() into RyomenX::Settings even while menu is closed
+    void SyncSettings();
+
     // Call every frame between ImGui::NewFrame() and ImGui::Render().
     // open: pass a bool* to let the menu's Hide button close it, or nullptr.
     void Render(bool* open);

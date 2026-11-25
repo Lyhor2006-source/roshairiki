@@ -10,6 +10,13 @@ _PB_PATH = _RYOMENX_DIR + '/esp.txt'
 _PB_STAT = _RYOMENX_DIR + '/esp_stat.txt'
 class _PBNotBattle(Exception):
     pass
+def _pb_is_player_type(tn):
+    if not tn:
+        return False
+    bad = ('Space', 'Hall', 'Lobby', 'Account', 'Login', 'Select', 'Vehicle', 'Plane', 'Drone', 'Door', 'Box', 'Item', 'Drop')
+    if any(b in tn for b in bad):
+        return False
+    return any(g in tn for g in ('BattleGround', 'Avatar', 'Athlete', 'Robot', 'Bot', 'Player', 'Hero'))
 _PB_ACTION_TS = 0.0
 _PB_DIAG_TS = 0.0
 _PB_EMPTY = False
@@ -1326,8 +1333,7 @@ def _pb_movement_world(me, c):
             for e in list(ents.values()):
                 if e is me or not hasattr(e, 'position'):
                     continue
-                tn = type(e).__name__
-                if not any(sub in tn for sub in ('Avatar', 'Athlete', 'Player', 'BattleGround', 'Hero')):
+                if not _pb_is_player_type(type(e).__name__):
                     continue
                 m = getattr(e, 'model', None)
                 if m is not None:
@@ -1476,8 +1482,7 @@ def _pb_esp(g):
         if me is None or not hasattr(me, 'position'):
             raise _PBNotBattle('not battle')
         tn0 = type(me).__name__
-        is_me_battle = any(sub in tn0 for sub in ('Avatar', 'Athlete', 'Player', 'BattleGround', 'Hero'))
-        if not is_me_battle and not hasattr(me, 'model'):
+        if not _pb_is_player_type(tn0) and not hasattr(me, 'model'):
             raise _PBNotBattle('not battle')
         delay = 0.020
         ents = BigWorld.entities
@@ -1515,10 +1520,8 @@ def _pb_esp(g):
             if e is me or not hasattr(e, 'position'):
                 continue
             tn = type(e).__name__
-            is_player = any(sub in tn for sub in ('Avatar', 'Athlete', 'Player', 'Robot', 'Bot', 'BattleGround', 'Hero'))
-            if not is_player:
-                if not (hasattr(e, 'model') and (hasattr(e, 'hp') or hasattr(e, 'isAlive') or hasattr(e, 'fashion') or hasattr(e, 'dressCloth'))):
-                    continue
+            if not _pb_is_player_type(tn):
+                continue
             try:
                 eid = int(getattr(e, 'id', k) or k)
                 is_alive = True
@@ -1681,9 +1684,16 @@ def _pb_esp(g):
         except Exception:
             pass
     except Exception:
-        pass
+        try:
+            import traceback, time
+            now_err = time.time()
+            if now_err - globals().get('_PB_LAST_ERR_TS', 0.0) >= 2.0:
+                globals()['_PB_LAST_ERR_TS'] = now_err
+                open(_RYOMENX_DIR + '/esp_last_err.txt', 'w').write(traceback.format_exc())
+        except Exception:
+            pass
     try:
-        if _PB_T % 50 == 1:
+        if globals().get('_PB_T', 0) % 50 == 1:
             _pb_publish(_PB_STAT, '%d %d %d %.2f %.2f %.2f' % (mo, ne, na, me6[0], me6[1], me6[2]))
     except Exception:
         pass
@@ -1740,8 +1750,7 @@ def _pb_team_diag(me, ents):
     for entity in list(ents.values()):
         if entity is me or not hasattr(entity, 'position'):
             continue
-        tn = type(entity).__name__
-        if not any(sub in tn for sub in ('Avatar', 'Athlete', 'Player', 'BattleGround', 'Hero')):
+        if not _pb_is_player_type(type(entity).__name__):
             continue
         row = {'fields': _pb_team_snapshot(entity), 'classification': _pb_enemy(me, entity)}
         for label, owner, other in (('local_api', me, entity), ('remote_api', entity, me)):
@@ -1767,7 +1776,7 @@ def _pb_diag(me, ents):
         pass
     try:
         out = ['ESP DIAG (compare which position is real)']
-        for tag, e in [('ME', me)] + [('E', ents[k]) for k in list(ents.keys()) if ents[k] is not me and any(sub in type(ents[k]).__name__ for sub in ('Avatar', 'Athlete', 'Player', 'BattleGround'))][:6]:
+        for tag, e in [('ME', me)] + [('E', ents[k]) for k in list(ents.keys()) if ents[k] is not me and _pb_is_player_type(type(ents[k]).__name__)][:6]:
             out.append('%s %s' % (tag, (getattr(e, 'nickname', '') or getattr(e, 'playerName', '') or '')[:16]))
             out.append('  position    ' + _pb_v(e, 'position'))
             out.append('  model.pos   ' + _pb_mv(e))

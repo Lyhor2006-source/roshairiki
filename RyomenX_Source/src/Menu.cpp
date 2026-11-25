@@ -3,6 +3,7 @@
 #include "MemoryCheats.hpp"
 #include "PythonBridge.hpp"
 #include "StealthBypass.hpp"
+#include <imgui_internal.h>
 
 #include <cstdio>
 #include <cmath>
@@ -36,7 +37,7 @@ namespace Menu
         return cfg;
     }
 
-    // Synchronize Menu::Cfg() to RyomenX::Settings so ESP overlay reads directly
+    // Synchronize Menu::Cfg() to RyomenX::Settings so ESP overlay & PythonBridge read directly
     static void SyncToRyomenX()
     {
         auto& s = RyomenX::Settings::Get();
@@ -68,7 +69,7 @@ namespace Menu
         s.silent_aim = c.silentAim;
         s.silent_360 = c.aim360;
         s.instant_aim = c.instantAim;
-        s.aim_power = c.aimStrength / 30.0f;
+        s.aim_power = clamp_val(c.aimStrength / 100.0f, 0.1f, 1.0f);
         s.target_bone = static_cast<RyomenX::TargetBone>(c.aimBone);
         s.aim_trigger = static_cast<RyomenX::AimTrigger>(c.aimActivation);
         s.fov_radius = c.aimFov * 4.0f;
@@ -82,6 +83,11 @@ namespace Menu
         s.screen_crosshair = c.screenCrosshair;
         s.show_watermark = c.showWatermark;
         s.menu_scale = c.menuScale;
+    }
+
+    void SyncSettings()
+    {
+        SyncToRyomenX();
     }
 
     // ---------- helpers ----------
@@ -504,7 +510,11 @@ namespace Menu
         Section("PLAYER & PHYSICS");
         static float speedVal = 2.5f;
         MemoryCheatRow(MemoryCheats::Feature::SPEED_HACK, speedVal);
-        SliderRow("Speed Multiplier", &speedVal, 1.5f, 6.0f, "%.1f x");
+        if (SliderRow("Speed Multiplier", &speedVal, 1.5f, 6.0f, "%.1f x")) {
+            if (MemoryCheats::GetControl(MemoryCheats::Feature::SPEED_HACK).active) {
+                MemoryCheats::RequestFeature(MemoryCheats::Feature::SPEED_HACK, true, speedVal);
+            }
+        }
 
         MemoryCheatRow(MemoryCheats::Feature::FLY_HACK);
         MemoryCheatRow(MemoryCheats::Feature::NO_FALL_DAMAGE);
@@ -576,6 +586,20 @@ namespace Menu
             s_force_recenter = true;
         }
 
+        Section("RUNTIME STATUS");
+        {
+            std::string pyStage = RyomenX::PythonBridge::Get().GetRuntimeStage();
+            bool pyOk = RyomenX::PythonBridge::Get().IsPayloadActive();
+            int w2sMode = RyomenX::PythonBridge::Get().GetEspMode();
+            int totalEnts = RyomenX::PythonBridge::Get().GetEntityCount();
+
+            ImGui::Text("Python Bridge: ");
+            ImGui::SameLine();
+            ImGui::TextColored(pyOk ? ImVec4(0.06f, 0.73f, 0.51f, 1.0f) : ImVec4(0.96f, 0.62f, 0.04f, 1.0f),
+                               "%s", pyStage.c_str());
+            ImGui::Text("W2S Mode: %d  |  Tracked Entities: %d", w2sMode, totalEnts);
+        }
+
         ImGui::Dummy(ImVec2(0, ImGui::GetFontSize() * 0.5f));
         ImGui::TextDisabled("RyomenX VIP - Reverse Engineered & Restructured");
         ImGui::TextDisabled("Dual NeoX BigWorld Engine & Metal Native Pipeline");
@@ -608,6 +632,7 @@ namespace Menu
         static bool s_has_centered = false;
         static float s_last_w = 0.0f;
         static float s_last_h = 0.0f;
+        static float s_last_scale = 1.0f;
 
         bool display_changed = (std::abs(io.DisplaySize.x - s_last_w) > 40.0f ||
                                 std::abs(io.DisplaySize.y - s_last_h) > 40.0f);
@@ -617,6 +642,11 @@ namespace Menu
             s_has_centered = false; // Re-center on resolution/orientation change
         }
 
+        bool scale_changed = (std::abs(cfg.menuScale - s_last_scale) > 0.02f);
+        if (scale_changed) {
+            s_last_scale = cfg.menuScale;
+        }
+
         // Center dynamically with 0.5 pivot (exact RyomenX center behavior)
         if (!s_has_centered || s_force_recenter) {
             ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f),
@@ -624,6 +654,8 @@ namespace Menu
             ImGui::SetNextWindowSize(size, ImGuiCond_Always);
             s_has_centered = true;
             s_force_recenter = false;
+        } else if (scale_changed) {
+            ImGui::SetNextWindowSize(size, ImGuiCond_Always);
         } else {
             ImGui::SetNextWindowSize(size, ImGuiCond_Once);
         }
@@ -791,13 +823,26 @@ namespace Menu
             return true;
         }
 
-        // Check Eclipse main menu window bounding box
+        // Check Eclipse main menu window & any open combo/color popups
         if (menuOpen)
         {
             if (x >= g_window_pos.x && x <= (g_window_pos.x + g_window_size.x) &&
                 y >= g_window_pos.y && y <= (g_window_pos.y + g_window_size.y))
             {
                 return true;
+            }
+
+            if (ImGuiContext* ctx = ImGui::GetCurrentContext())
+            {
+                for (ImGuiWindow* win : ctx->Windows)
+                {
+                    if (!win || !win->Active || win->Hidden) continue;
+                    if (x >= win->Pos.x && x <= (win->Pos.x + win->Size.x) &&
+                        y >= win->Pos.y && y <= (win->Pos.y + win->Size.y))
+                    {
+                        return true;
+                    }
+                }
             }
         }
 

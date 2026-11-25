@@ -1,4 +1,5 @@
 #include "MemoryCheats.hpp"
+#include "PythonBridge.hpp"
 #include <iostream>
 #include <algorithm>
 
@@ -306,42 +307,17 @@ void OneHitAllGunON() {
     ctrl.message = (applied > 0) ? "ACTIVE: verified weapon matches" : "Patch failed";
 }
 
-void NoRecoilON() {
-    FeatureControl& ctrl = s_controls[static_cast<size_t>(Feature::NO_RECOIL)];
+static void ActivatePythonBackedFeature(Feature feat, const char* note) {
+    FeatureControl& ctrl = s_controls[static_cast<size_t>(feat)];
     std::lock_guard<std::mutex> lock(ctrl.mtx);
-
     ctrl.patch_state.Clear();
-    auto regions = MachMemory::QueryRegions(MachMemory::GetRegionMode());
-    if (regions.empty()) regions = MachMemory::QueryAllWritableRegions();
-
-    std::vector<MachMemory::SearchItem> items = {
-        MachMemory::SearchItem(static_cast<uint32_t>(20002)),
-        MachMemory::SearchItem(1.88f),
-        MachMemory::SearchItem(2.50f)
-    };
-
-    auto matches = MachMemory::GroupScan(regions, items, 1, 120);
-    ctrl.matches = matches.size();
-
-    if (matches.empty()) {
-        ctrl.active = false;
-        ctrl.busy = false;
-        ctrl.message = "Pattern not found";
-        return;
-    }
-
-    float zero_recoil = 0.0f;
-    size_t applied = 0;
-    for (uintptr_t addr : matches) {
-        if (ctrl.patch_state.AddAndApply(addr, &zero_recoil, sizeof(float))) {
-            applied++;
-        }
-    }
-
-    ctrl.modified = applied;
-    ctrl.active = (applied > 0);
+    ctrl.active = true;
     ctrl.busy = false;
-    ctrl.message = (applied > 0) ? "ACTIVE" : "Patch failed";
+    ctrl.message = note ? note : (RyomenX::PythonBridge::Get().IsPayloadActive() ? "ACTIVE (NeoX)" : "ACTIVE (Pending Py)");
+}
+
+void NoRecoilON() {
+    ActivatePythonBackedFeature(Feature::NO_RECOIL, "ACTIVE (NeoX)");
 }
 
 void AutoScopeON() {
@@ -439,81 +415,18 @@ void FastHealON() {
 }
 
 void SpeedHackON(float multiplier) {
-    FeatureControl& ctrl = s_controls[static_cast<size_t>(Feature::SPEED_HACK)];
-    std::lock_guard<std::mutex> lock(ctrl.mtx);
-
-    s_speed_setting = multiplier;
-    ctrl.patch_state.Clear();
-    auto regions = MachMemory::QueryRegions(MachMemory::GetRegionMode());
-    if (regions.empty()) regions = MachMemory::QueryAllWritableRegions();
-
-    // Default base speed 1.0f in player physics component
-    auto matches = MachMemory::ScanFloat(regions, 1.0f, 0.0001f);
-    ctrl.matches = matches.size();
-
-    size_t applied = 0;
-    for (uintptr_t addr : matches) {
-        if (ctrl.patch_state.AddAndApply(addr, &multiplier, sizeof(float))) {
-            applied++;
-        }
-    }
-
-    ctrl.modified = applied;
-    ctrl.active = (applied > 0);
-    ctrl.busy = false;
-    if (applied > 0) {
-        char buf[64];
-        snprintf(buf, sizeof(buf), "ACTIVE (%.1fx Engine)", multiplier);
-        ctrl.message = buf;
-    } else {
-        ctrl.message = "Pattern not found";
-    }
+    s_speed_setting = std::max(1.1f, std::min(30.0f, multiplier));
+    char buf[64];
+    std::snprintf(buf, sizeof(buf), "ACTIVE (%.1fx NeoX)", s_speed_setting);
+    ActivatePythonBackedFeature(Feature::SPEED_HACK, buf);
 }
 
 void WallHackON() {
-    FeatureControl& ctrl = s_controls[static_cast<size_t>(Feature::WALL_HACK)];
-    std::lock_guard<std::mutex> lock(ctrl.mtx);
-
-    ctrl.patch_state.Clear();
-    auto regions = MachMemory::QueryRegions(MachMemory::GetRegionMode());
-    if (regions.empty()) regions = MachMemory::QueryAllWritableRegions();
-
-    uint32_t search = 515; // GL_LESS / Depth test
-    auto matches = MachMemory::ScanDword(regions, search, 4);
-
-    uint32_t patch = 519; // GL_ALWAYS
-    size_t applied = 0;
-    for (uintptr_t addr : matches) {
-        if (ctrl.patch_state.AddAndApply(addr, &patch, sizeof(uint32_t))) {
-            applied++;
-        }
-    }
-    ctrl.active = (applied > 0);
-    ctrl.busy = false;
-    ctrl.message = (applied > 0) ? "ACTIVE" : "Pattern not found";
+    ActivatePythonBackedFeature(Feature::WALL_HACK, "ACTIVE (NeoX)");
 }
 
 void NoFallDamageON() {
-    FeatureControl& ctrl = s_controls[static_cast<size_t>(Feature::NO_FALL_DAMAGE)];
-    std::lock_guard<std::mutex> lock(ctrl.mtx);
-
-    auto regions = MachMemory::QueryRegions(MachMemory::GetRegionMode());
-    if (regions.empty()) regions = MachMemory::QueryAllWritableRegions();
-
-    float threshold = 20.5f;
-    auto matches = MachMemory::ScanFloat(regions, threshold, 0.01f);
-
-    float immune = 999999.0f;
-    if (!matches.empty()) {
-        MachMemory::RegisterFreeze("NoFall_Threshold", matches[0], &immune, sizeof(float));
-        ctrl.active = true;
-        ctrl.busy = false;
-        ctrl.message = "ACTIVE (20.5f)";
-    } else {
-        ctrl.active = false;
-        ctrl.busy = false;
-        ctrl.message = "Pattern not found";
-    }
+    ActivatePythonBackedFeature(Feature::NO_FALL_DAMAGE, "ACTIVE (NeoX)");
 }
 
 void NoFallDamageOFF() {
@@ -521,26 +434,7 @@ void NoFallDamageOFF() {
 }
 
 void FlyHackON() {
-    FeatureControl& ctrl = s_controls[static_cast<size_t>(Feature::FLY_HACK)];
-    std::lock_guard<std::mutex> lock(ctrl.mtx);
-
-    auto regions = MachMemory::QueryRegions(MachMemory::GetRegionMode());
-    if (regions.empty()) regions = MachMemory::QueryAllWritableRegions();
-
-    float gravity = -9.8f;
-    auto matches = MachMemory::ScanFloat(regions, gravity, 0.01f);
-
-    float lift = 0.5f;
-    if (!matches.empty()) {
-        MachMemory::RegisterFreeze("Fly_Gravity", matches[0], &lift, sizeof(float));
-        ctrl.active = true;
-        ctrl.busy = false;
-        ctrl.message = "ACTIVE";
-    } else {
-        ctrl.active = false;
-        ctrl.busy = false;
-        ctrl.message = "Pattern not found";
-    }
+    ActivatePythonBackedFeature(Feature::FLY_HACK, "ACTIVE (NeoX)");
 }
 
 void FlyHackOFF() {
@@ -548,118 +442,23 @@ void FlyHackOFF() {
 }
 
 void UnderGroundON() {
-    FeatureControl& ctrl = s_controls[static_cast<size_t>(Feature::UNDER_GROUND)];
-    std::lock_guard<std::mutex> lock(ctrl.mtx);
-
-    ctrl.patch_state.Clear();
-    auto regions = MachMemory::QueryRegions(MachMemory::GetRegionMode());
-    if (regions.empty()) regions = MachMemory::QueryAllWritableRegions();
-
-    // Underground depth -13.5f / -20.0f
-    double depth = -13.5;
-    auto matches = MachMemory::ScanQword(regions, *reinterpret_cast<uint64_t*>(&depth), 8);
-
-    double underground_target = -20.0;
-    size_t applied = 0;
-    for (uintptr_t addr : matches) {
-        if (ctrl.patch_state.AddAndApply(addr, &underground_target, sizeof(double))) {
-            applied++;
-        }
-    }
-    ctrl.active = (applied > 0);
-    ctrl.busy = false;
-    ctrl.message = (applied > 0) ? "ACTIVE" : "Pattern not found";
+    ActivatePythonBackedFeature(Feature::UNDER_GROUND, "ACTIVE (NeoX)");
 }
 
 void NoGrassON() {
-    FeatureControl& ctrl = s_controls[static_cast<size_t>(Feature::NO_GRASS)];
-    std::lock_guard<std::mutex> lock(ctrl.mtx);
-
-    ctrl.patch_state.Clear();
-    auto regions = MachMemory::QueryRegions(MachMemory::GetRegionMode());
-    if (regions.empty()) regions = MachMemory::QueryAllWritableRegions();
-
-    // Grass render distance float (450.0f)
-    auto matches = MachMemory::ScanFloat(regions, 450.0f, 0.1f);
-    float zero_dist = 0.0f;
-    size_t applied = 0;
-    for (uintptr_t addr : matches) {
-        if (ctrl.patch_state.AddAndApply(addr, &zero_dist, sizeof(float))) {
-            applied++;
-        }
-    }
-    ctrl.active = (applied > 0);
-    ctrl.busy = false;
-    ctrl.message = (applied > 0) ? "ACTIVE (Vegetation)" : "Pattern not found";
+    ActivatePythonBackedFeature(Feature::NO_GRASS, "ACTIVE (NeoX)");
 }
 
 void FastParachuteON() {
-    FeatureControl& ctrl = s_controls[static_cast<size_t>(Feature::FAST_PARACHUTE)];
-    std::lock_guard<std::mutex> lock(ctrl.mtx);
-
-    ctrl.patch_state.Clear();
-    auto regions = MachMemory::QueryRegions(MachMemory::GetRegionMode());
-    if (regions.empty()) regions = MachMemory::QueryAllWritableRegions();
-
-    float fall_speed = -5.0f;
-    auto matches = MachMemory::ScanFloat(regions, fall_speed, 0.05f);
-
-    float fast_fall = -35.0f;
-    size_t applied = 0;
-    for (uintptr_t addr : matches) {
-        if (ctrl.patch_state.AddAndApply(addr, &fast_fall, sizeof(float))) {
-            applied++;
-        }
-    }
-    ctrl.active = (applied > 0);
-    ctrl.busy = false;
-    ctrl.message = (applied > 0) ? "ACTIVE" : "Pattern not found";
+    ActivatePythonBackedFeature(Feature::FAST_PARACHUTE, "ACTIVE (NeoX)");
 }
 
 void CameraWideON() {
-    FeatureControl& ctrl = s_controls[static_cast<size_t>(Feature::CAMERA_WIDE)];
-    std::lock_guard<std::mutex> lock(ctrl.mtx);
-
-    ctrl.patch_state.Clear();
-    auto regions = MachMemory::QueryRegions(MachMemory::GetRegionMode());
-    if (regions.empty()) regions = MachMemory::QueryAllWritableRegions();
-
-    float base_fov = 65.0f;
-    auto matches = MachMemory::ScanFloat(regions, base_fov, 0.05f);
-
-    float wide_fov = 105.0f;
-    size_t applied = 0;
-    for (uintptr_t addr : matches) {
-        if (ctrl.patch_state.AddAndApply(addr, &wide_fov, sizeof(float))) {
-            applied++;
-        }
-    }
-    ctrl.active = (applied > 0);
-    ctrl.busy = false;
-    ctrl.message = (applied > 0) ? "ACTIVE" : "Pattern not found";
+    ActivatePythonBackedFeature(Feature::CAMERA_WIDE, "ACTIVE (NeoX 95deg)");
 }
 
 void ClearFogON() {
-    FeatureControl& ctrl = s_controls[static_cast<size_t>(Feature::CLEAR_FOG)];
-    std::lock_guard<std::mutex> lock(ctrl.mtx);
-
-    ctrl.patch_state.Clear();
-    auto regions = MachMemory::QueryRegions(MachMemory::GetRegionMode());
-    if (regions.empty()) regions = MachMemory::QueryAllWritableRegions();
-
-    float fog_density = 0.005f;
-    auto matches = MachMemory::ScanFloat(regions, fog_density, 0.0001f);
-
-    float zero_fog = 0.0f;
-    size_t applied = 0;
-    for (uintptr_t addr : matches) {
-        if (ctrl.patch_state.AddAndApply(addr, &zero_fog, sizeof(float))) {
-            applied++;
-        }
-    }
-    ctrl.active = (applied > 0);
-    ctrl.busy = false;
-    ctrl.message = (applied > 0) ? "ACTIVE" : "Pattern not found";
+    ActivatePythonBackedFeature(Feature::CLEAR_FOG, "ACTIVE (NeoX)");
 }
 
 } // namespace MemoryCheats

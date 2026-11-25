@@ -218,6 +218,15 @@ static bool s_menu_open = true;
 
     ImDrawList* background_draw_list = ImGui::GetBackgroundDrawList();
 
+    // Sync Menu configuration & Python bridge unconditionally before rendering HUD / ESP
+    Menu::SyncSettings();
+    RyomenX::PythonBridge::Get().UpdateFromEspFile(
+        io.DisplaySize.x, io.DisplaySize.y,
+        io.DisplayFramebufferScale.x, io.DisplayFramebufferScale.y);
+    RyomenX::PythonBridge::Get().WriteConfigSync(
+        io.DisplaySize.x, io.DisplaySize.y,
+        io.DisplayFramebufferScale.x, io.DisplayFramebufferScale.y);
+
     // 1. Render ESP Visualization Overlay (Bones, Boxes, Snaplines, HP, Radar)
     IosUI::RenderEspOverlay(background_draw_list, io.DisplaySize);
 

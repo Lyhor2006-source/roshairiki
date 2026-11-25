@@ -342,10 +342,6 @@ void RenderEspOverlay(ImDrawList* draw_list, ImVec2 display_size) {
         draw_list->AddCircle(center, s.fov_radius, IM_COL32(255, 255, 255, 120), 48, 1.0f);
     }
 
-    // Sync entities from Python bridge
-    PythonBridge::Get().UpdateFromEspFile();
-    PythonBridge::Get().WriteConfigSync();
-
     auto entities = PythonBridge::Get().GetEntities();
     ImVec2 screen_center(display_size.x * 0.5f, display_size.y * 0.5f);
 
@@ -362,7 +358,7 @@ void RenderEspOverlay(ImDrawList* draw_list, ImVec2 display_size) {
         if (s.filter_bots && ent.is_bot) continue;
         if (ent.distance > s.esp_range) continue;
 
-        uint32_t box_color = ent.is_bot ? s.bot_color.ToU32() : s.enemy_color.ToU32();
+        uint32_t box_color = ent.is_bot ? s.bot_color.ToU32() : (ent.is_enemy == 0 ? IM_COL32(70, 230, 120, 255) : s.enemy_color.ToU32());
         uint32_t skel_color = s.skeleton_color.ToU32();
         uint32_t snap_color = s.line_color.ToU32();
 
@@ -383,7 +379,11 @@ void RenderEspOverlay(ImDrawList* draw_list, ImVec2 display_size) {
         }
 
         auto box = ent.GetBox();
-        if (!box.IsValid()) continue;
+        if (!box.IsValid() || box.Height() > display_size.y * 4.0f) continue;
+        if (box.max_x < 0.0f || box.min_x > display_size.x ||
+            box.max_y < 0.0f || box.min_y > display_size.y) {
+            continue;
+        }
 
         // 2. Bounding Box
         if (s.show_box) {
@@ -450,20 +450,24 @@ void RenderEspOverlay(ImDrawList* draw_list, ImVec2 display_size) {
         }
 
         // 6. Text info (Name, Distance, Knocked status)
-        char info_top[128];
-        if (ent.is_knocked) {
-            snprintf(info_top, sizeof(info_top), "[DOWN] %s", ent.name.c_str());
-        } else if (ent.is_bot) {
-            snprintf(info_top, sizeof(info_top), "BOT %s", ent.name.c_str());
-        } else if (s.show_team) {
-            snprintf(info_top, sizeof(info_top), "[%d] %s", ent.team_id, ent.name.c_str());
-        } else {
-            snprintf(info_top, sizeof(info_top), "%s", ent.name.c_str());
-        }
+        if (s.show_name || s.show_team) {
+            char info_top[128];
+            if (ent.is_knocked) {
+                snprintf(info_top, sizeof(info_top), "[DOWN] %s", ent.name.c_str());
+            } else if (ent.is_bot) {
+                snprintf(info_top, sizeof(info_top), "BOT %s", ent.name.c_str());
+            } else if (s.show_team && s.show_name) {
+                snprintf(info_top, sizeof(info_top), "[%d] %s", ent.team_id, ent.name.c_str());
+            } else if (s.show_team) {
+                snprintf(info_top, sizeof(info_top), "[T%d]", ent.team_id);
+            } else {
+                snprintf(info_top, sizeof(info_top), "%s", ent.name.c_str());
+            }
 
-        ImVec2 text_sz = ImGui::CalcTextSize(info_top);
-        ImVec2 text_pos(box.min_x + (box.Width() - text_sz.x) * 0.5f, box.min_y - text_sz.y - 2.0f);
-        draw_list->AddText(text_pos, IM_COL32(255, 255, 255, 240), info_top);
+            ImVec2 text_sz = ImGui::CalcTextSize(info_top);
+            ImVec2 text_pos(box.min_x + (box.Width() - text_sz.x) * 0.5f, box.min_y - text_sz.y - 2.0f);
+            draw_list->AddText(text_pos, IM_COL32(255, 255, 255, 240), info_top);
+        }
 
         if (s.show_distance) {
             char dist_str[32];

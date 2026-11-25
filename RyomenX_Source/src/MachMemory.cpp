@@ -106,7 +106,7 @@ std::vector<MemoryRegion> QueryRegions(RegionMode mode) {
         }
 
         bool writable = (info.protection & VM_PROT_WRITE) != 0;
-        if (writable) {
+        if (writable && size > 0 && size <= (64ULL * 1024ULL * 1024ULL)) {
             bool matches_mode = false;
             switch (mode) {
                 case RegionMode::OTHER:

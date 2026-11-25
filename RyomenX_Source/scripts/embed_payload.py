@@ -13,7 +13,7 @@ def main():
         sys.exit(1)
 
     with open(src_py, "rb") as f:
-        data = f.read()
+        data = f.read().replace(b"\r\n", b"\n").replace(b"\r", b"\n")
 
     print(f"Embedding {len(data)} bytes from {src_py} into {out_hpp}...")
 
