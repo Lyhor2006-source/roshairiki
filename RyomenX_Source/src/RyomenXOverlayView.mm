@@ -5,6 +5,7 @@
 #include "IosUI.hpp"
 #include "Menu.h"
 #include "Config.hpp"
+#include "PythonBridge.hpp"
 #include <imgui.h>
 
 // Standard ImGui Metal backend declarations
